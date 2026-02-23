@@ -1,2 +1,1 @@
-export const handler = async (event: any): Promise<void> => {
-}
+export { handler } from './handlers/sync.js'

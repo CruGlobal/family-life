@@ -1,20 +1,37 @@
 {
-  "name": "cru-app-lambda-template",
+  "name": "familylife-ert-sync",
   "version": "1.0.0",
-  "description": "",
+  "description": "FamilyLife ERT-to-Salesforce registration sync Lambda",
   "author": "",
   "license": "BSD-3-Clause",
-  "type": "module",
+  "private": true,
   "engines": {
     "node": ">= 24.0.0"
   },
   "scripts": {
     "build": "node esbuild.config.mjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@aws-sdk/client-ssm": "^3.750.0",
+    "@eslint/js": "^9.18.0",
+    "@types/aws-lambda": "^8.10.147",
     "@types/node": "^25.1.0",
+    "@vitest/coverage-v8": "^3.0.4",
+    "dotenv": "^16.4.7",
     "esbuild": "^0.27.2",
-    "typescript": "^5.9.3"
+    "eslint": "^9.18.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.21.0",
+    "vitest": "^3.0.4"
+  },
+  "dependencies": {
+    "jsforce": "^3.6.3",
+    "rollbar": "^2.26.5",
+    "source-map-support": "^0.5.21"
   }
 }
