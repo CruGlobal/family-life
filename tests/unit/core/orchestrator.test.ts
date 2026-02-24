@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { runSync } from '@/core/orchestrator.js'
+import { runRegistrationsToSF } from '@/core/orchestrator.js'
 import { resetConfig } from '@/config/index.js'
 import type { Services } from '@/services/index.js'
 
-describe('runSync', () => {
+describe('runRegistrationsToSF', () => {
   beforeEach(() => {
     resetConfig()
     process.env.ERT_BASE_URL = 'https://api.test.com'
@@ -118,7 +118,7 @@ describe('runSync', () => {
 
   it('runs full sync pipeline', async () => {
     const services = makeServices()
-    const result = await runSync(services)
+    const result = await runRegistrationsToSF(services)
 
     expect(result.conferencesFound).toBe(1)
     expect(result.conferencesProcessed).toBe(1)
@@ -132,7 +132,7 @@ describe('runSync', () => {
       ministries: [{ id: 'm-1', name: 'OtherMinistry', activities: [] }],
     })
 
-    await expect(runSync(services)).rejects.toThrow('Ministry "Family Life" not found')
+    await expect(runRegistrationsToSF(services)).rejects.toThrow('Ministry "Family Life" not found')
   })
 
   it('throws when ministry has no activities', async () => {
@@ -140,7 +140,7 @@ describe('runSync', () => {
       ministries: [{ id: 'm-1', name: 'Family Life', activities: [] }],
     })
 
-    await expect(runSync(services)).rejects.toThrow('has no activities')
+    await expect(runRegistrationsToSF(services)).rejects.toThrow('has no activities')
   })
 
   it('throws when WTR activity not found', async () => {
@@ -150,7 +150,7 @@ describe('runSync', () => {
       ],
     })
 
-    await expect(runSync(services)).rejects.toThrow('Activity "WTR" not found')
+    await expect(runRegistrationsToSF(services)).rejects.toThrow('Activity "WTR" not found')
   })
 
   it('filters out archived conferences', async () => {
@@ -173,7 +173,7 @@ describe('runSync', () => {
       ],
     })
 
-    const result = await runSync(services)
+    const result = await runRegistrationsToSF(services)
     expect(result.conferencesFound).toBe(1)
   })
 
@@ -197,7 +197,7 @@ describe('runSync', () => {
       ],
     })
 
-    const result = await runSync(services)
+    const result = await runRegistrationsToSF(services)
     expect(result.conferencesFound).toBe(1)
   })
 
@@ -243,7 +243,7 @@ describe('runSync', () => {
       })
     })
 
-    const result = await runSync(services)
+    const result = await runRegistrationsToSF(services)
 
     expect(result.conferencesProcessed).toBe(1)
     expect(result.errors).toHaveLength(1)
@@ -254,7 +254,7 @@ describe('runSync', () => {
 
   it('updates lastImportDate to run start time', async () => {
     const services = makeServices()
-    const result = await runSync(services)
+    const result = await runRegistrationsToSF(services)
 
     expect(services.ssm.updateLastImportDate).toHaveBeenCalledWith(result.runStartTime)
     // runStartTime should be a valid ISO string

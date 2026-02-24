@@ -4,7 +4,7 @@ import { processConference } from './conference-processor.js'
 import { logger } from '../utils/logging.js'
 import { getConfig } from '../config/index.js'
 
-export interface SyncResult {
+export interface RegistrationsToSFResult {
   runStartTime: string
   lastImportDate: string
   conferencesFound: number
@@ -13,7 +13,7 @@ export interface SyncResult {
   errors: Array<{ conferenceId: string; error: string }>
 }
 
-export async function runSync(services: Services): Promise<SyncResult> {
+export async function runRegistrationsToSF(services: Services): Promise<RegistrationsToSFResult> {
   const runStartTime = new Date().toISOString()
   const config = getConfig()
 
@@ -22,11 +22,7 @@ export async function runSync(services: Services): Promise<SyncResult> {
   logger.info('Starting sync', { lastImportDate, runStartTime })
 
   // 2. Find FamilyLife ministry and WTR activity
-  const [ministries, conferences] = await Promise.all([
-    services.ert.getMinistries(),
-    // We'll filter conferences after we find the ministry/activity IDs
-    Promise.resolve(null),
-  ])
+  const ministries = await services.ert.getMinistries()
 
   const ministry = ministries.find(m => m.name === config.ertMinistryName)
   if (!ministry) {
@@ -86,7 +82,7 @@ export async function runSync(services: Services): Promise<SyncResult> {
   // 5. Update lastImportDate
   await services.ssm.updateLastImportDate(runStartTime)
 
-  const syncResult: SyncResult = {
+  const syncResult: RegistrationsToSFResult = {
     runStartTime,
     lastImportDate,
     conferencesFound: wtrConferences.length,

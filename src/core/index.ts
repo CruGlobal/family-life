@@ -4,8 +4,8 @@ export { transformRegistrant } from './registration-transformer.js'
 export type { TransformContext } from './registration-transformer.js'
 export { processConference } from './conference-processor.js'
 export type { ConferenceResult } from './conference-processor.js'
-export { runSync } from './orchestrator.js'
-export type { SyncResult } from './orchestrator.js'
+export { runRegistrationsToSF } from './orchestrator.js'
+export type { RegistrationsToSFResult } from './orchestrator.js'
 export {
   TAG_TO_SF_FIELD,
   CHURCH_ADDRESS_TAG,

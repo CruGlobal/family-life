@@ -50,11 +50,9 @@ export async function processConference(
 
   const sfRecords: StagingInvolvementRecord[] = []
   let skipped = 0
-  let totalRegistrants = 0
 
   for (const registration of registrations) {
     for (const registrant of registration.registrants || []) {
-      totalRegistrants++
       const record = transformRegistrant(registration, registrant, context)
       if (record) {
         sfRecords.push(record)
