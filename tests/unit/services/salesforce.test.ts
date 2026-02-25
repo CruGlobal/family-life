@@ -1,17 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { SalesforceService } from '@/services/salesforce.js'
 import { resetConfig } from '@/config/index.js'
-import type { StagingInvolvementRecord } from '@/types/salesforce.js'
+import type { StagingInvolvementRecord, CompositeResponse } from '@/types/salesforce.js'
+
+const mockRequestPost = vi.fn()
 
 vi.mock('jsforce', () => {
-  const mockInsert = vi.fn()
-  const mockSobject = vi.fn(() => ({ insert: mockInsert }))
-  const MockConnection = vi.fn(() => ({ sobject: mockSobject }))
+  const MockConnection = vi.fn(() => ({
+    version: '62.0',
+    requestPost: mockRequestPost,
+  }))
   return {
     default: { Connection: MockConnection },
     Connection: MockConnection,
-    __mockInsert: mockInsert,
-    __mockSobject: mockSobject,
   }
 })
 
@@ -43,6 +44,45 @@ describe('SalesforceService', () => {
         instance_url: 'https://test.my.salesforce.com',
       }),
     })
+  }
+
+  function makeSuccessResponse(recordCount: number, batchSize = 200): CompositeResponse {
+    const batchCount = Math.ceil(recordCount / batchSize)
+    const compositeResponse = []
+
+    for (let b = 0; b < batchCount; b++) {
+      const size = Math.min(batchSize, recordCount - b * batchSize)
+      const body = Array.from({ length: size }, (_, i) => ({
+        id: `a${b * batchSize + i + 1}`,
+        success: true as const,
+        errors: [] as Array<{ message: string; statusCode: string }>,
+      }))
+      compositeResponse.push({
+        body,
+        httpHeaders: {},
+        httpStatusCode: 200,
+        referenceId: `batch_${b}`,
+      })
+    }
+
+    return { compositeResponse }
+  }
+
+  function makeFailureResponse(): CompositeResponse {
+    return {
+      compositeResponse: [{
+        body: [
+          {
+            id: null,
+            success: false,
+            errors: [{ message: 'Required field missing', statusCode: 'REQUIRED_FIELD_MISSING' }],
+          },
+        ],
+        httpHeaders: {},
+        httpStatusCode: 400,
+        referenceId: 'batch_0',
+      }],
+    }
   }
 
   it('authenticates with client_credentials grant type', async () => {
@@ -90,42 +130,88 @@ describe('SalesforceService', () => {
     expect(result).toEqual({ successCount: 0, errorCount: 0, errors: [] })
   })
 
-  it('inserts records in batches', async () => {
+  it('sends correct Composite API payload with SObject Collections', async () => {
     mockAuthFetch()
-    const { __mockInsert } = await import('jsforce') as unknown as { __mockInsert: ReturnType<typeof vi.fn> }
-    __mockInsert.mockResolvedValue([
-      { success: true, id: 'a1' },
-      { success: true, id: 'a2' },
-    ])
+    mockRequestPost.mockResolvedValue(makeSuccessResponse(2))
 
     const svc = new SalesforceService()
-    const records: StagingInvolvementRecord[] = [
-      makeMinimalRecord('r1'),
-      makeMinimalRecord('r2'),
-    ]
+    const records = [makeMinimalRecord('r1'), makeMinimalRecord('r2')]
+    await svc.insertStagingRecords(records)
 
+    expect(mockRequestPost).toHaveBeenCalledTimes(1)
+    const [url, payload] = mockRequestPost.mock.calls[0]
+
+    expect(url).toBe('/services/data/v62.0/composite')
+    expect(payload.allOrNone).toBe(true)
+    expect(payload.compositeRequest).toHaveLength(1)
+
+    const subreq = payload.compositeRequest[0]
+    expect(subreq.method).toBe('POST')
+    expect(subreq.url).toBe('/services/data/v62.0/composite/sobjects')
+    expect(subreq.body.allOrNone).toBe(true)
+    expect(subreq.body.records).toHaveLength(2)
+    expect(subreq.body.records[0].attributes.type).toBe('Staging_Involvement__c')
+    expect(subreq.body.records[0].Last_Name__c).toBe('Test')
+  })
+
+  it('counts successes from response', async () => {
+    mockAuthFetch()
+    mockRequestPost.mockResolvedValue(makeSuccessResponse(2))
+
+    const svc = new SalesforceService()
+    const records = [makeMinimalRecord('r1'), makeMinimalRecord('r2')]
     const result = await svc.insertStagingRecords(records)
 
     expect(result.successCount).toBe(2)
     expect(result.errorCount).toBe(0)
   })
 
-  it('counts errors from failed inserts', async () => {
+  it('throws on failure (atomic rollback)', async () => {
     mockAuthFetch()
-    const { __mockInsert } = await import('jsforce') as unknown as { __mockInsert: ReturnType<typeof vi.fn> }
-    __mockInsert.mockResolvedValue([
-      { success: true, id: 'a1' },
-      { success: false, errors: [{ message: 'Required field missing' }] },
-    ])
+    mockRequestPost.mockResolvedValue(makeFailureResponse())
 
     const svc = new SalesforceService()
-    const records = [makeMinimalRecord('r1'), makeMinimalRecord('r2')]
+    const records = [makeMinimalRecord('r1')]
 
+    await expect(svc.insertStagingRecords(records)).rejects.toThrow(
+      'Composite insert failed (all records rolled back): Required field missing'
+    )
+  })
+
+  it('throws when record count exceeds 1,000', async () => {
+    mockAuthFetch()
+
+    const svc = new SalesforceService()
+    const records = Array.from({ length: 1_001 }, (_, i) => makeMinimalRecord(`r${i}`))
+
+    await expect(svc.insertStagingRecords(records)).rejects.toThrow(
+      'Cannot atomically insert 1001 records'
+    )
+    expect(mockRequestPost).not.toHaveBeenCalled()
+  })
+
+  it('batches records into multiple subrequests', async () => {
+    mockAuthFetch()
+    process.env.SF_BATCH_SIZE = '200'
+    resetConfig()
+
+    mockRequestPost.mockResolvedValue(makeSuccessResponse(450))
+
+    const svc = new SalesforceService()
+    const records = Array.from({ length: 450 }, (_, i) => makeMinimalRecord(`r${i}`))
     const result = await svc.insertStagingRecords(records)
 
-    expect(result.successCount).toBe(1)
-    expect(result.errorCount).toBe(1)
-    expect(result.errors[0].message).toBe('Required field missing')
+    const [, payload] = mockRequestPost.mock.calls[0]
+    const subrequests = payload.compositeRequest
+
+    expect(subrequests).toHaveLength(3)
+    expect(subrequests[0].body.records).toHaveLength(200)
+    expect(subrequests[1].body.records).toHaveLength(200)
+    expect(subrequests[2].body.records).toHaveLength(50)
+    expect(subrequests[0].referenceId).toBe('batch_0')
+    expect(subrequests[1].referenceId).toBe('batch_1')
+    expect(subrequests[2].referenceId).toBe('batch_2')
+    expect(result.successCount).toBe(450)
   })
 })
 

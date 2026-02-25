@@ -1,4 +1,6 @@
 import type { Services } from '../services/index.js'
+import type { ERTConferenceDetail } from '../types/ert.js'
+import type { InsertResult } from '../types/salesforce.js'
 import type { ConferenceResult } from './conference-processor.js'
 import { processConference } from './conference-processor.js'
 import { logger } from '../utils/logging.js'
@@ -9,8 +11,9 @@ export interface RegistrationsToSFResult {
   lastImportDate: string
   conferencesFound: number
   conferencesProcessed: number
+  totalRecords: number
   conferenceResults: ConferenceResult[]
-  errors: Array<{ conferenceId: string; error: string }>
+  insertResult: InsertResult
 }
 
 export async function runRegistrationsToSF(services: Services): Promise<RegistrationsToSFResult> {
@@ -40,61 +43,94 @@ export async function runRegistrationsToSF(services: Services): Promise<Registra
     )
   }
 
-  // Fetch conferences for this ministry (need eventType, but we don't filter by it on API call)
-  const allConferences = await services.ert.getConferences(ministry.id, '')
+  // Fetch conferences for this ministry
+  const allConferences = await services.ert.getConferences(ministry.id)
 
-  // Filter: only WTR conferences, not archived
-  const wtrConferences = allConferences.filter(c =>
-    c.ministryActivity === wtrActivity.id && !c.archived
-  )
+  // The list endpoint doesn't reliably return ministryActivity, so we
+  // fetch the detail for each non-archived conference to get the real value.
+  const nonArchived = allConferences.filter(c => !c.archived)
 
-  logger.info('Found WTR conferences', {
+  logger.info('Fetching conference details to determine activity', {
     total: allConferences.length,
-    wtr: wtrConferences.length,
+    nonArchived: nonArchived.length,
   })
 
-  // 4. Process each conference (Promise.allSettled for isolation)
-  const results = await Promise.allSettled(
-    wtrConferences.map(conf =>
-      processConference(conf, lastImportDate, services)
+  const detailResults = await Promise.allSettled(
+    nonArchived.map(c => services.ert.getConferenceDetail(c.id))
+  )
+
+  const wtrDetails: ERTConferenceDetail[] = []
+  for (const result of detailResults) {
+    if (result.status === 'fulfilled' && result.value.ministryActivity === wtrActivity.id) {
+      wtrDetails.push(result.value)
+    }
+  }
+
+  logger.info('Found WTR conferences', {
+    nonArchived: nonArchived.length,
+    wtr: wtrDetails.length,
+  })
+
+  // 3. Gather records from all conferences (parallel, but any failure aborts the run)
+  const gatherResults = await Promise.allSettled(
+    wtrDetails.map(detail =>
+      processConference(detail, lastImportDate, services)
     )
   )
 
   const conferenceResults: ConferenceResult[] = []
-  const errors: Array<{ conferenceId: string; error: string }> = []
+  const gatherErrors: Array<{ conferenceId: string; error: string }> = []
 
-  results.forEach((result, index) => {
-    const conf = wtrConferences[index]
+  gatherResults.forEach((result, index) => {
+    const detail = wtrDetails[index]
     if (result.status === 'fulfilled') {
       conferenceResults.push(result.value)
     } else {
       const errMsg = result.reason instanceof Error
         ? result.reason.message
         : String(result.reason)
-      errors.push({ conferenceId: conf.id, error: errMsg })
-      logger.error('Conference processing failed', result.reason, {
-        conferenceId: conf.id,
-        conferenceName: conf.name,
+      gatherErrors.push({ conferenceId: detail.id, error: errMsg })
+      logger.error('Conference gather failed', result.reason, {
+        conferenceId: detail.id,
+        conferenceName: detail.name,
       })
     }
   })
 
-  // 5. Update lastImportDate
+  // If any conference gather failed, abort — don't insert, don't advance cursor
+  if (gatherErrors.length > 0) {
+    const summary = gatherErrors.map(e => `${e.conferenceId}: ${e.error}`).join('; ')
+    throw new Error(`Gather failed for ${gatherErrors.length} conference(s): ${summary}`)
+  }
+
+  // 4. Collect all records and do one atomic insert
+  const allRecords = conferenceResults.flatMap(r => r.records)
+
+  logger.info('Inserting all records atomically', {
+    totalRecords: allRecords.length,
+    conferences: conferenceResults.length,
+  })
+
+  const insertResult = await services.salesforce.insertStagingRecords(allRecords)
+
+  // 5. Update lastImportDate only after successful insert
   await services.ssm.updateLastImportDate(runStartTime)
 
   const syncResult: RegistrationsToSFResult = {
     runStartTime,
     lastImportDate,
-    conferencesFound: wtrConferences.length,
+    conferencesFound: wtrDetails.length,
     conferencesProcessed: conferenceResults.length,
+    totalRecords: allRecords.length,
     conferenceResults,
-    errors,
+    insertResult,
   }
 
   logger.info('Sync complete', {
     conferencesFound: syncResult.conferencesFound,
     conferencesProcessed: syncResult.conferencesProcessed,
-    errors: syncResult.errors.length,
+    totalRecords: syncResult.totalRecords,
+    insertSuccess: insertResult.successCount,
   })
 
   return syncResult

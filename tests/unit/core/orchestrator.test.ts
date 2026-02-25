@@ -20,10 +20,27 @@ describe('runRegistrationsToSF', () => {
     resetConfig()
   })
 
+  const defaultDetail = {
+    id: 'c-1',
+    name: 'WTR Lincoln',
+    abbreviation: 'WTR26LNK1',
+    archived: false,
+    ministry: 'm-1',
+    ministryActivity: 'a-wtr',
+    eventType: '0f87dff6-0115-4d86-8bc7-5e785334b3e2',
+    eventStartTime: '2026-03-15T18:00:00',
+    eventEndTime: '2026-03-17T12:00:00',
+    locationName: 'Marriott',
+    contactPersonName: 'John',
+    contactPersonEmail: 'j@cru.org',
+    registrationPages: [{ id: 'p1', blocks: [] }],
+    registrantTypes: [{ id: 'rt-1', name: 'Couple' }],
+  }
+
   function makeServices(overrides: Partial<{
     ministries: unknown[]
     conferences: unknown[]
-    conferenceDetail: unknown
+    conferenceDetails: Record<string, unknown>
     registrations: unknown[]
     insertResult: { successCount: number; errorCount: number; errors: never[] }
     lastImportDate: string
@@ -42,28 +59,13 @@ describe('runRegistrationsToSF', () => {
         abbreviation: 'WTR26LNK1',
         archived: false,
         ministry: 'm-1',
-        ministryActivity: 'a-wtr',
-        eventType: '0f87dff6-0115-4d86-8bc7-5e785334b3e2',
+        ministryActivity: null,
+        eventType: null,
         eventStartTime: '2026-03-15T18:00:00',
         eventEndTime: '2026-03-17T12:00:00',
       },
     ]
-    const detail = overrides.conferenceDetail ?? {
-      id: 'c-1',
-      name: 'WTR Lincoln',
-      abbreviation: 'WTR26LNK1',
-      archived: false,
-      ministry: 'm-1',
-      ministryActivity: 'a-wtr',
-      eventType: '0f87dff6-0115-4d86-8bc7-5e785334b3e2',
-      eventStartTime: '2026-03-15T18:00:00',
-      eventEndTime: '2026-03-17T12:00:00',
-      locationName: 'Marriott',
-      contactPersonName: 'John',
-      contactPersonEmail: 'j@cru.org',
-      registrationPages: [{ id: 'p1', blocks: [] }],
-      registrantTypes: [{ id: 'rt-1', name: 'Couple' }],
-    }
+    const detailMap = overrides.conferenceDetails ?? { 'c-1': defaultDetail }
     const registrations = overrides.registrations ?? [
       {
         id: 'r-1',
@@ -97,7 +99,10 @@ describe('runRegistrationsToSF', () => {
       ert: {
         getMinistries: vi.fn().mockResolvedValue(ministries),
         getConferences: vi.fn().mockResolvedValue(conferences),
-        getConferenceDetail: vi.fn().mockResolvedValue(detail),
+        getConferenceDetail: vi.fn().mockImplementation((id: string) => {
+          const detail = detailMap[id]
+          return detail ? Promise.resolve(detail) : Promise.reject(new Error(`Not found: ${id}`))
+        }),
         getRegistrations: vi.fn(),
         getAllRegistrations: vi.fn().mockResolvedValue(registrations),
       },
@@ -122,7 +127,8 @@ describe('runRegistrationsToSF', () => {
 
     expect(result.conferencesFound).toBe(1)
     expect(result.conferencesProcessed).toBe(1)
-    expect(result.errors).toHaveLength(0)
+    expect(result.totalRecords).toBe(1)
+    expect(result.insertResult.successCount).toBe(1)
     expect(services.ssm.getLastImportDate).toHaveBeenCalled()
     expect(services.ssm.updateLastImportDate).toHaveBeenCalledWith(result.runStartTime)
   })
@@ -160,96 +166,137 @@ describe('runRegistrationsToSF', () => {
           id: 'c-1',
           name: 'Active WTR',
           archived: false,
-          ministryActivity: 'a-wtr',
-          eventType: 'et-1',
+          ministryActivity: null,
+          eventType: null,
         },
         {
           id: 'c-2',
           name: 'Archived WTR',
           archived: true,
-          ministryActivity: 'a-wtr',
-          eventType: 'et-1',
+          ministryActivity: null,
+          eventType: null,
         },
       ],
+      conferenceDetails: {
+        'c-1': { ...defaultDetail, id: 'c-1', name: 'Active WTR' },
+        'c-2': { ...defaultDetail, id: 'c-2', name: 'Archived WTR' },
+      },
     })
 
     const result = await runRegistrationsToSF(services)
+    expect(services.ert.getConferenceDetail).toHaveBeenCalledTimes(1)
     expect(result.conferencesFound).toBe(1)
   })
 
-  it('filters out non-WTR conferences', async () => {
+  it('filters out non-WTR conferences via detail lookup', async () => {
     const services = makeServices({
       conferences: [
         {
           id: 'c-1',
           name: 'WTR conf',
           archived: false,
-          ministryActivity: 'a-wtr',
-          eventType: 'et-1',
+          ministryActivity: null,
+          eventType: null,
         },
         {
           id: 'c-2',
           name: 'Other conf',
           archived: false,
-          ministryActivity: 'a-other',
-          eventType: 'et-1',
+          ministryActivity: null,
+          eventType: null,
         },
       ],
+      conferenceDetails: {
+        'c-1': { ...defaultDetail, id: 'c-1', name: 'WTR conf', ministryActivity: 'a-wtr' },
+        'c-2': { ...defaultDetail, id: 'c-2', name: 'Other conf', ministryActivity: 'a-other' },
+      },
     })
 
     const result = await runRegistrationsToSF(services)
     expect(result.conferencesFound).toBe(1)
   })
 
-  it('isolates conference failures with Promise.allSettled', async () => {
+  it('aborts entire run when any conference gather fails', async () => {
+    const goodDetail = { ...defaultDetail, id: 'c-1', name: 'Good conf', ministryActivity: 'a-wtr' }
+    const badDetail = { ...defaultDetail, id: 'c-2', name: 'Bad conf', ministryActivity: 'a-wtr' }
+
     const services = makeServices({
       conferences: [
-        {
-          id: 'c-1',
-          name: 'Good conf',
-          archived: false,
-          ministryActivity: 'a-wtr',
-          eventType: 'et-1',
-        },
-        {
-          id: 'c-2',
-          name: 'Bad conf',
-          archived: false,
-          ministryActivity: 'a-wtr',
-          eventType: 'et-1',
-        },
+        { id: 'c-1', name: 'Good conf', archived: false, ministryActivity: null, eventType: null },
+        { id: 'c-2', name: 'Bad conf', archived: false, ministryActivity: null, eventType: null },
       ],
+      conferenceDetails: {
+        'c-1': goodDetail,
+        'c-2': badDetail,
+      },
     })
 
-    // First call succeeds, second fails
-    let callCount = 0
-    ;(services.ert.getConferenceDetail as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      callCount++
-      if (callCount === 2) {
+    // getAllRegistrations succeeds for c-1, fails for c-2
+    let regCallCount = 0
+    ;(services.ert.getAllRegistrations as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      regCallCount++
+      if (regCallCount === 2) {
         return Promise.reject(new Error('API timeout'))
       }
-      return Promise.resolve({
-        id: 'c-1',
-        name: 'Good conf',
-        abbreviation: 'WTR26G',
-        eventType: 'et-1',
-        eventStartTime: '',
-        eventEndTime: '',
-        locationName: '',
-        contactPersonName: '',
-        contactPersonEmail: '',
-        registrationPages: [{ id: 'p1', blocks: [] }],
-        registrantTypes: [{ id: 'rt-1', name: 'Couple' }],
-      })
+      return Promise.resolve([{
+        id: 'r-1',
+        conferenceId: 'c-1',
+        primaryRegistrantId: 'rg-1',
+        completed: true,
+        registrants: [{
+          id: 'rg-1',
+          registrantTypeId: 'rt-1',
+          firstName: 'Jane',
+          lastName: 'Smith',
+          email: 'jane@test.com',
+          withdrawn: false,
+          withdrawnTimestamp: null,
+          checkedInTimestamp: null,
+          eformStatus: null,
+          answers: [],
+        }],
+      }])
+    })
+
+    await expect(runRegistrationsToSF(services)).rejects.toThrow('Gather failed for 1 conference(s)')
+
+    // No SF insert should happen
+    expect(services.salesforce.insertStagingRecords).not.toHaveBeenCalled()
+    // Cursor should NOT advance
+    expect(services.ssm.updateLastImportDate).not.toHaveBeenCalled()
+  })
+
+  it('aborts when SF insert fails — cursor stays put', async () => {
+    const services = makeServices()
+    ;(services.salesforce.insertStagingRecords as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Composite Graph insert failed (all records rolled back): FIELD_CUSTOM_VALIDATION_EXCEPTION')
+    )
+
+    await expect(runRegistrationsToSF(services)).rejects.toThrow('Composite Graph insert failed')
+    expect(services.ssm.updateLastImportDate).not.toHaveBeenCalled()
+  })
+
+  it('combines records from multiple conferences into one insert call', async () => {
+    const detail1 = { ...defaultDetail, id: 'c-1', name: 'WTR Lincoln', ministryActivity: 'a-wtr' }
+    const detail2 = { ...defaultDetail, id: 'c-2', name: 'WTR Denver', ministryActivity: 'a-wtr' }
+
+    const services = makeServices({
+      conferences: [
+        { id: 'c-1', name: 'WTR Lincoln', archived: false, ministryActivity: null, eventType: null },
+        { id: 'c-2', name: 'WTR Denver', archived: false, ministryActivity: null, eventType: null },
+      ],
+      conferenceDetails: { 'c-1': detail1, 'c-2': detail2 },
+      insertResult: { successCount: 2, errorCount: 0, errors: [] as never[] },
     })
 
     const result = await runRegistrationsToSF(services)
 
-    expect(result.conferencesProcessed).toBe(1)
-    expect(result.errors).toHaveLength(1)
-    expect(result.errors[0].error).toContain('API timeout')
-    // SSM should still be updated
-    expect(services.ssm.updateLastImportDate).toHaveBeenCalled()
+    // One insert call with records from both conferences
+    expect(services.salesforce.insertStagingRecords).toHaveBeenCalledTimes(1)
+    const insertedRecords = (services.salesforce.insertStagingRecords as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(insertedRecords).toHaveLength(2)
+    expect(result.totalRecords).toBe(2)
+    expect(result.conferencesProcessed).toBe(2)
   })
 
   it('updates lastImportDate to run start time', async () => {
@@ -257,7 +304,19 @@ describe('runRegistrationsToSF', () => {
     const result = await runRegistrationsToSF(services)
 
     expect(services.ssm.updateLastImportDate).toHaveBeenCalledWith(result.runStartTime)
-    // runStartTime should be a valid ISO string
     expect(new Date(result.runStartTime).toISOString()).toBe(result.runStartTime)
+  })
+
+  it('skips SF insert for zero records but still advances cursor', async () => {
+    const services = makeServices({ registrations: [] })
+    ;(services.salesforce.insertStagingRecords as ReturnType<typeof vi.fn>).mockResolvedValue(
+      { successCount: 0, errorCount: 0, errors: [] }
+    )
+
+    const result = await runRegistrationsToSF(services)
+
+    expect(result.totalRecords).toBe(0)
+    expect(services.salesforce.insertStagingRecords).toHaveBeenCalledWith([])
+    expect(services.ssm.updateLastImportDate).toHaveBeenCalled()
   })
 })

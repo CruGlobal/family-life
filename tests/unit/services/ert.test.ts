@@ -57,6 +57,20 @@ describe('ErtService', () => {
     expect(calledUrl).toContain('eventTypes=et-1')
   })
 
+  it('getConferences omits eventTypes when not provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    })
+
+    const svc = new ErtService()
+    await svc.getConferences('m-1')
+
+    const calledUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(calledUrl).toContain('ministries=m-1')
+    expect(calledUrl).not.toContain('eventTypes')
+  })
+
   it('getConferenceDetail fetches by conferenceId', async () => {
     const detail = { id: 'c-1', name: 'Test', registrationPages: [] }
     global.fetch = vi.fn().mockResolvedValue({

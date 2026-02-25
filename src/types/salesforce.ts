@@ -89,3 +89,16 @@ export interface InsertResult {
   errorCount: number
   errors: Array<{ id?: string; message: string }>
 }
+
+export interface CompositeResponse {
+  compositeResponse: Array<{
+    body: Array<{
+      id: string | null
+      success: boolean
+      errors: Array<{ message: string; statusCode: string }>
+    }>
+    httpHeaders: Record<string, string>
+    httpStatusCode: number
+    referenceId: string
+  }>
+}

@@ -41,28 +41,14 @@ describe('registrationsToSF handler', () => {
     const { runRegistrationsToSF } = await import('@/core/orchestrator.js')
     ;(runRegistrationsToSF as ReturnType<typeof vi.fn>).mockResolvedValue({
       conferencesProcessed: 1,
-      errors: [],
+      totalRecords: 2,
+      insertResult: { successCount: 2, errorCount: 0, errors: [] },
     })
 
     const { handler } = await import('@/handlers/registrations-to-sf.js')
     await handler({} as never)
 
     expect(runRegistrationsToSF).toHaveBeenCalled()
-  })
-
-  it('reports warnings to rollbar when there are errors', async () => {
-    const { runRegistrationsToSF } = await import('@/core/orchestrator.js')
-    ;(runRegistrationsToSF as ReturnType<typeof vi.fn>).mockResolvedValue({
-      conferencesProcessed: 1,
-      errors: [{ conferenceId: 'c-1', error: 'test error' }],
-    })
-
-    const rollbar = (await import('@/config/rollbar.js')).default
-
-    const { handler } = await import('@/handlers/registrations-to-sf.js')
-    await handler({} as never)
-
-    expect(rollbar.warning).toHaveBeenCalled()
   })
 
   it('reports errors to rollbar and re-throws on failure', async () => {

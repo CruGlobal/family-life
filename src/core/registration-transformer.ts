@@ -6,6 +6,7 @@ import {
   getRegistrationStatus,
   getFLRegistrationType,
   getEventTypeName,
+  toSalesforceDateTime,
 } from './field-mapping.js'
 
 export interface TransformContext {
@@ -112,13 +113,15 @@ export function transformRegistrant(
   record.Date_Cancelled__c = registrant.withdrawnTimestamp || null
   record.Date_Check_In__c = registrant.checkedInTimestamp || null
   record.ERT_Last_Updated__c = registration.lastUpdatedTimestamp || null
-  record.Involvement_Registration_Created_Date__c = registration.lastUpdatedTimestamp || null
+  record.Involvement_Registration_Created_Date__c = registration.lastUpdatedTimestamp
+    ? toSalesforceDateTime(registration.lastUpdatedTimestamp)
+    : null
 
   // Event fields (conditional: not empty)
   if (conf.name) record.Event_Name__c = conf.name
   if (conf.locationName) record.Event_Location__c = conf.locationName
-  if (conf.eventStartTime) record.Event_Start_Date__c = conf.eventStartTime
-  if (conf.eventEndTime) record.Event_End_Date__c = conf.eventEndTime
+  if (conf.eventStartTime) record.Event_Start_Date__c = toSalesforceDateTime(conf.eventStartTime)
+  if (conf.eventEndTime) record.Event_End_Date__c = toSalesforceDateTime(conf.eventEndTime)
   if (conf.contactPersonName) record.Event_Sponsor_Staff_Name__c = conf.contactPersonName
   if (conf.contactPersonEmail) record.Event_Sponsor_Staff_Email__c = conf.contactPersonEmail
   record.Event_Type__c = getEventTypeName(conf.eventType || '')

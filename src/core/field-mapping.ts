@@ -60,3 +60,13 @@ export function getFLRegistrationType(registrantTypeName: string): string {
 export function getEventTypeName(eventTypeId: string): string {
   return EVENT_TYPE_MAP[eventTypeId] ?? eventTypeId
 }
+
+/**
+ * Normalize a datetime string to Salesforce ISO format: YYYY-MM-DDTHH:mm:ss.000Z
+ * Matches Celigo's extractDateFormat "YYYY-MM-DDTHH:mm:ss" behavior:
+ * parses up to seconds precision, outputs with .000Z.
+ */
+export function toSalesforceDateTime(value: string): string {
+  const normalized = value.replace(' ', 'T')
+  return normalized.substring(0, 19) + '.000Z'
+}

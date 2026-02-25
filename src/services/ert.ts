@@ -8,6 +8,18 @@ import type {
 } from '../types/ert.js'
 import { logger } from '../utils/logging.js'
 
+/** Convert an ISO 8601 datetime to the format ERT expects: `DD/MM/YYYY HH:mm:ss` */
+function toErtDatetime(iso: string): string {
+  const d = new Date(iso)
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const year = d.getUTCFullYear()
+  const hours = String(d.getUTCHours()).padStart(2, '0')
+  const minutes = String(d.getUTCMinutes()).padStart(2, '0')
+  const seconds = String(d.getUTCSeconds()).padStart(2, '0')
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`
+}
+
 export class ErtService {
   private baseUrl: string
   private apiKey: string
@@ -45,11 +57,12 @@ export class ErtService {
     return this.request<ERTMinistry[]>('/ministries')
   }
 
-  async getConferences(ministryId: string, eventTypeId: string): Promise<ERTConferenceSummary[]> {
-    return this.request<ERTConferenceSummary[]>('/conferences', {
-      ministries: ministryId,
-      eventTypes: eventTypeId,
-    })
+  async getConferences(ministryId: string, eventTypeId?: string): Promise<ERTConferenceSummary[]> {
+    const params: Record<string, string> = { ministries: ministryId }
+    if (eventTypeId) {
+      params.eventTypes = eventTypeId
+    }
+    return this.request<ERTConferenceSummary[]>('/conferences', params)
   }
 
   async getConferenceDetail(conferenceId: string): Promise<ERTConferenceDetail> {
@@ -63,7 +76,7 @@ export class ErtService {
     const params: Record<string, string> = {}
     if (options?.page !== undefined) params.page = String(options.page)
     if (options?.pageSize !== undefined) params.per_page = String(options.pageSize)
-    if (options?.filterAfter) params.filterAfter = options.filterAfter
+    if (options?.filterAfter) params.filterAfter = toErtDatetime(options.filterAfter)
     return this.request<ERTPaginatedResponse<ERTRegistration>>(
       `/conferences/${conferenceId}/registrations`,
       params
