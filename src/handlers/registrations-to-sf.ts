@@ -13,15 +13,9 @@ export async function handler(_event: ScheduledEvent): Promise<void> {
 
     logger.info('registrationsToSF handler complete', {
       conferencesProcessed: result.conferencesProcessed,
-      errors: result.errors.length,
+      totalRecords: result.totalRecords,
+      insertSuccess: result.insertResult.successCount,
     })
-
-    if (result.errors.length > 0) {
-      await rollbar.warning('registrationsToSF completed with errors', {
-        errors: result.errors,
-        conferencesProcessed: result.conferencesProcessed,
-      })
-    }
   } catch (err) {
     logger.error('registrationsToSF handler failed', err)
     await rollbar.error('registrationsToSF handler failed', err instanceof Error ? err : new Error(String(err)))

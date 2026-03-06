@@ -3,6 +3,7 @@ import {
   getRegistrationStatus,
   getFLRegistrationType,
   getEventTypeName,
+  toSalesforceDateTime,
   TAG_TO_SF_FIELD,
   CHURCH_ADDRESS_TAG,
   CHURCH_ADDRESS_FIELD_MAP,
@@ -121,5 +122,23 @@ describe('CHURCH_ADDRESS_FIELD_MAP', () => {
 describe('EVENT_TYPE_MAP', () => {
   it('has 6 entries', () => {
     expect(Object.keys(EVENT_TYPE_MAP)).toHaveLength(6)
+  })
+})
+
+describe('toSalesforceDateTime', () => {
+  it('normalizes ISO without Z to .000Z', () => {
+    expect(toSalesforceDateTime('2026-05-15T19:00:00')).toBe('2026-05-15T19:00:00.000Z')
+  })
+
+  it('truncates milliseconds and replaces Z with .000Z', () => {
+    expect(toSalesforceDateTime('2026-02-13T15:28:50.785Z')).toBe('2026-02-13T15:28:50.000Z')
+  })
+
+  it('handles space separator', () => {
+    expect(toSalesforceDateTime('2026-05-15 19:00:00')).toBe('2026-05-15T19:00:00.000Z')
+  })
+
+  it('handles full ISO with Z', () => {
+    expect(toSalesforceDateTime('2026-03-15T18:30:00Z')).toBe('2026-03-15T18:30:00.000Z')
   })
 })

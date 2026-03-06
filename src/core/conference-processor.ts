@@ -1,5 +1,5 @@
-import type { ERTConferenceDetail, ERTConferenceSummary } from '../types/ert.js'
-import type { StagingInvolvementRecord, InsertResult } from '../types/salesforce.js'
+import type { ERTConferenceDetail } from '../types/ert.js'
+import type { StagingInvolvementRecord } from '../types/salesforce.js'
 import type { Services } from '../services/index.js'
 import type { BlockLookups } from './answer-processor.js'
 import { transformRegistrant, type TransformContext } from './registration-transformer.js'
@@ -11,18 +11,15 @@ export interface ConferenceResult {
   registrationsFound: number
   registrantsProcessed: number
   registrantsSkipped: number
-  insertResult: InsertResult
+  records: StagingInvolvementRecord[]
 }
 
 export async function processConference(
-  conferenceSummary: ERTConferenceSummary,
+  detail: ERTConferenceDetail,
   lastImportDate: string,
   services: Services
 ): Promise<ConferenceResult> {
-  const conferenceId = conferenceSummary.id
-
-  // Fetch full conference detail (blocks, registrant types)
-  const detail: ERTConferenceDetail = await services.ert.getConferenceDetail(conferenceId)
+  const conferenceId = detail.id
 
   // Build lookup maps
   const lookups = buildLookups(detail)
@@ -62,17 +59,12 @@ export async function processConference(
     }
   }
 
-  // Insert into Salesforce
-  const insertResult = await services.salesforce.insertStagingRecords(sfRecords)
-
-  logger.info('Conference processing complete', {
+  logger.info('Conference gather complete', {
     conferenceId,
     conferenceName: detail.name,
     registrationsFound: registrations.length,
     registrantsProcessed: sfRecords.length,
     registrantsSkipped: skipped,
-    sfSuccess: insertResult.successCount,
-    sfErrors: insertResult.errorCount,
   })
 
   return {
@@ -81,7 +73,7 @@ export async function processConference(
     registrationsFound: registrations.length,
     registrantsProcessed: sfRecords.length,
     registrantsSkipped: skipped,
-    insertResult,
+    records: sfRecords,
   }
 }
 

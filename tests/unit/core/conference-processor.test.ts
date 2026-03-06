@@ -1,29 +1,25 @@
 import { describe, it, expect, vi } from 'vitest'
 import { processConference } from '@/core/conference-processor.js'
-import { makeConferenceSummary, makeConferenceDetail } from '../../fixtures/conferences.js'
+import { makeConferenceDetail } from '../../fixtures/conferences.js'
 import { makeRegistration, makeRegistrant } from '../../fixtures/registrations.js'
 import type { Services } from '@/services/index.js'
 
 function mockServices(overrides: Partial<{
-  conferenceDetail: ReturnType<typeof makeConferenceDetail>
   registrations: ReturnType<typeof makeRegistration>[]
-  insertResult: { successCount: number; errorCount: number; errors: never[] }
 }> = {}): Services {
-  const detail = overrides.conferenceDetail ?? makeConferenceDetail()
   const registrations = overrides.registrations ?? [makeRegistration()]
-  const insertResult = overrides.insertResult ?? { successCount: 1, errorCount: 0, errors: [] }
 
   return {
     ert: {
       getMinistries: vi.fn(),
       getConferences: vi.fn(),
-      getConferenceDetail: vi.fn().mockResolvedValue(detail),
+      getConferenceDetail: vi.fn(),
       getRegistrations: vi.fn(),
       getAllRegistrations: vi.fn().mockResolvedValue(registrations),
     },
     salesforce: {
       getConnection: vi.fn(),
-      insertStagingRecords: vi.fn().mockResolvedValue(insertResult),
+      insertStagingRecords: vi.fn(),
     },
     ssm: {
       getLastImportDate: vi.fn(),
@@ -33,13 +29,13 @@ function mockServices(overrides: Partial<{
 }
 
 describe('processConference', () => {
-  it('fetches conference detail and registrations', async () => {
+  it('fetches registrations using the provided detail', async () => {
     const services = mockServices()
-    const conf = makeConferenceSummary()
+    const detail = makeConferenceDetail()
 
-    await processConference(conf, '2026-01-01T00:00:00Z', services)
+    await processConference(detail, '2026-01-01T00:00:00Z', services)
 
-    expect(services.ert.getConferenceDetail).toHaveBeenCalledWith('conf-001')
+    expect(services.ert.getConferenceDetail).not.toHaveBeenCalled()
     expect(services.ert.getAllRegistrations).toHaveBeenCalledWith(
       'conf-001',
       '2026-01-01T00:00:00Z',
@@ -47,7 +43,7 @@ describe('processConference', () => {
     )
   })
 
-  it('transforms and inserts registrants', async () => {
+  it('transforms registrants and returns records', async () => {
     const registrations = [
       makeRegistration({
         registrants: [
@@ -56,20 +52,18 @@ describe('processConference', () => {
         ],
       }),
     ]
-    const services = mockServices({
-      registrations,
-      insertResult: { successCount: 2, errorCount: 0, errors: [] },
-    })
+    const services = mockServices({ registrations })
 
     const result = await processConference(
-      makeConferenceSummary(),
+      makeConferenceDetail(),
       '2026-01-01T00:00:00Z',
       services
     )
 
     expect(result.registrantsProcessed).toBe(2)
     expect(result.registrantsSkipped).toBe(0)
-    expect(services.salesforce.insertStagingRecords).toHaveBeenCalledTimes(1)
+    expect(result.records).toHaveLength(2)
+    expect(services.salesforce.insertStagingRecords).not.toHaveBeenCalled()
   })
 
   it('skips registrants without names', async () => {
@@ -84,13 +78,14 @@ describe('processConference', () => {
     const services = mockServices({ registrations })
 
     const result = await processConference(
-      makeConferenceSummary(),
+      makeConferenceDetail(),
       '2026-01-01T00:00:00Z',
       services
     )
 
     expect(result.registrantsProcessed).toBe(1)
     expect(result.registrantsSkipped).toBe(1)
+    expect(result.records).toHaveLength(1)
   })
 
   it('skips incomplete registrations', async () => {
@@ -103,19 +98,20 @@ describe('processConference', () => {
     const services = mockServices({ registrations })
 
     const result = await processConference(
-      makeConferenceSummary(),
+      makeConferenceDetail(),
       '2026-01-01T00:00:00Z',
       services
     )
 
     expect(result.registrantsProcessed).toBe(0)
     expect(result.registrantsSkipped).toBe(1)
+    expect(result.records).toHaveLength(0)
   })
 
   it('returns conference metadata in result', async () => {
     const services = mockServices()
     const result = await processConference(
-      makeConferenceSummary(),
+      makeConferenceDetail(),
       '2026-01-01T00:00:00Z',
       services
     )
@@ -127,13 +123,14 @@ describe('processConference', () => {
   it('handles empty registrations list', async () => {
     const services = mockServices({ registrations: [] })
     const result = await processConference(
-      makeConferenceSummary(),
+      makeConferenceDetail(),
       '2026-01-01T00:00:00Z',
       services
     )
 
     expect(result.registrationsFound).toBe(0)
     expect(result.registrantsProcessed).toBe(0)
-    expect(services.salesforce.insertStagingRecords).toHaveBeenCalledWith([])
+    expect(result.records).toHaveLength(0)
+    expect(services.salesforce.insertStagingRecords).not.toHaveBeenCalled()
   })
 })
