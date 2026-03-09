@@ -43,8 +43,10 @@ export async function runRegistrationsToSF(services: Services): Promise<Registra
     )
   }
 
-  // Fetch conferences for this ministry
-  const allConferences = await services.ert.getConferences(ministry.id)
+  // Fetch conferences for this ministry, filtered by WTR event type.
+  // The eventTypes param is required in production to avoid returning all 10K+ conferences.
+  const WTR_EVENT_TYPE_ID = '9f63db46-6ca9-43b0-868a-23326b3c4d91'
+  const allConferences = await services.ert.getConferences(ministry.id, WTR_EVENT_TYPE_ID)
 
   // The list endpoint doesn't reliably return ministryActivity, so we
   // fetch the detail for each non-archived conference to get the real value.
