@@ -1,37 +1,8 @@
-export interface ERTMinistry {
-  id: string
-  name: string
-  activities: ERTMinistryActivity[]
-  eventTypes?: ERTEventType[]
-}
-
-export interface ERTMinistryActivity {
-  id: string
-  name: string
-}
-
-export interface ERTEventType {
-  id: string
-  name: string
-}
-
 export interface ERTBlockTagType {
   id: string
   name: string
   prettyName: string
   ministryId?: string
-}
-
-export interface ERTConferenceSummary {
-  id: string
-  name: string
-  abbreviation: string | null
-  archived: boolean
-  ministry: string | null
-  ministryActivity: string | null
-  eventType: string | null
-  eventStartTime: string
-  eventEndTime: string
 }
 
 export interface ERTConferenceDetail {
