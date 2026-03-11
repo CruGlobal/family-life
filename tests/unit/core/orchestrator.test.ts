@@ -38,33 +38,13 @@ describe('runRegistrationsToSF', () => {
   }
 
   function makeServices(overrides: Partial<{
-    ministries: unknown[]
-    conferences: unknown[]
+    conferenceIds: string[]
     conferenceDetails: Record<string, unknown>
     registrations: unknown[]
     insertResult: { successCount: number; errorCount: number; errors: never[] }
     lastImportDate: string
   }> = {}): Services {
-    const ministries = overrides.ministries ?? [
-      {
-        id: '9f63db46-6ca9-43b0-868a-23326b3c4d91',
-        name: 'Family Life',
-        activities: [{ id: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19', name: 'WTR' }],
-      },
-    ]
-    const conferences = overrides.conferences ?? [
-      {
-        id: 'c-1',
-        name: 'WTR Lincoln',
-        abbreviation: 'WTR26LNK1',
-        archived: false,
-        ministry: '9f63db46-6ca9-43b0-868a-23326b3c4d91',
-        ministryActivity: null,
-        eventType: null,
-        eventStartTime: '2026-03-15T18:00:00',
-        eventEndTime: '2026-03-17T12:00:00',
-      },
-    ]
+    const conferenceIds = overrides.conferenceIds ?? ['c-1']
     const detailMap = overrides.conferenceDetails ?? { 'c-1': defaultDetail }
     const registrations = overrides.registrations ?? [
       {
@@ -97,8 +77,7 @@ describe('runRegistrationsToSF', () => {
 
     return {
       ert: {
-        getMinistries: vi.fn().mockResolvedValue(ministries),
-        getConferences: vi.fn().mockResolvedValue(conferences),
+        getConferenceIds: vi.fn().mockResolvedValue(conferenceIds),
         getConferenceDetail: vi.fn().mockImplementation((id: string) => {
           const detail = detailMap[id]
           return detail ? Promise.resolve(detail) : Promise.reject(new Error(`Not found: ${id}`))
@@ -133,105 +112,18 @@ describe('runRegistrationsToSF', () => {
     expect(services.ssm.updateLastImportDate).toHaveBeenCalledWith(result.runStartTime)
   })
 
-  it('throws when ministry not found', async () => {
-    const services = makeServices({
-      ministries: [{ id: 'other-id', name: 'OtherMinistry', activities: [] }],
-    })
-
-    await expect(runRegistrationsToSF(services)).rejects.toThrow('Ministry "9f63db46-6ca9-43b0-868a-23326b3c4d91" not found')
-  })
-
-  it('throws when ministry has no activities', async () => {
-    const services = makeServices({
-      ministries: [{ id: '9f63db46-6ca9-43b0-868a-23326b3c4d91', name: 'Family Life', activities: [] }],
-    })
-
-    await expect(runRegistrationsToSF(services)).rejects.toThrow('has no activities')
-  })
-
-  it('throws when WTR activity not found', async () => {
-    const services = makeServices({
-      ministries: [
-        { id: '9f63db46-6ca9-43b0-868a-23326b3c4d91', name: 'Family Life', activities: [{ id: 'a-other', name: 'Other' }] },
-      ],
-    })
-
-    await expect(runRegistrationsToSF(services)).rejects.toThrow('Activity "9c6eae3f-8928-4703-a2a4-e5bf995dfd19" not found')
-  })
-
-  it('filters out archived conferences', async () => {
-    const services = makeServices({
-      conferences: [
-        {
-          id: 'c-1',
-          name: 'Active WTR',
-          archived: false,
-          ministryActivity: null,
-          eventType: null,
-        },
-        {
-          id: 'c-2',
-          name: 'Archived WTR',
-          archived: true,
-          ministryActivity: null,
-          eventType: null,
-        },
-      ],
-      conferenceDetails: {
-        'c-1': { ...defaultDetail, id: 'c-1', name: 'Active WTR' },
-        'c-2': { ...defaultDetail, id: 'c-2', name: 'Archived WTR' },
-      },
-    })
-
-    const result = await runRegistrationsToSF(services)
-    expect(services.ert.getConferenceDetail).toHaveBeenCalledTimes(1)
-    expect(result.conferencesFound).toBe(1)
-  })
-
-  it('filters out non-WTR conferences via detail lookup', async () => {
-    const services = makeServices({
-      conferences: [
-        {
-          id: 'c-1',
-          name: 'WTR conf',
-          archived: false,
-          ministryActivity: null,
-          eventType: null,
-        },
-        {
-          id: 'c-2',
-          name: 'Other conf',
-          archived: false,
-          ministryActivity: null,
-          eventType: null,
-        },
-      ],
-      conferenceDetails: {
-        'c-1': { ...defaultDetail, id: 'c-1', name: 'WTR conf', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' },
-        'c-2': { ...defaultDetail, id: 'c-2', name: 'Other conf', ministryActivity: 'a-other' },
-      },
-    })
-
-    const result = await runRegistrationsToSF(services)
-    expect(result.conferencesFound).toBe(1)
-  })
-
   it('aborts entire run when any conference gather fails', async () => {
-    const goodDetail = { ...defaultDetail, id: 'c-1', name: 'Good conf', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' }
-    const badDetail = { ...defaultDetail, id: 'c-2', name: 'Bad conf', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' }
+    const goodDetail = { ...defaultDetail, id: 'c-1', name: 'Good conf' }
+    const badDetail = { ...defaultDetail, id: 'c-2', name: 'Bad conf' }
 
     const services = makeServices({
-      conferences: [
-        { id: 'c-1', name: 'Good conf', archived: false, ministryActivity: null, eventType: null },
-        { id: 'c-2', name: 'Bad conf', archived: false, ministryActivity: null, eventType: null },
-      ],
+      conferenceIds: ['c-1', 'c-2'],
       conferenceDetails: {
         'c-1': goodDetail,
         'c-2': badDetail,
       },
     })
 
-    // getAllRegistrations succeeds for c-1, fails for c-2
     let regCallCount = 0
     ;(services.ert.getAllRegistrations as ReturnType<typeof vi.fn>).mockImplementation(() => {
       regCallCount++
@@ -277,21 +169,17 @@ describe('runRegistrationsToSF', () => {
   })
 
   it('combines records from multiple conferences into one insert call', async () => {
-    const detail1 = { ...defaultDetail, id: 'c-1', name: 'WTR Lincoln', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' }
-    const detail2 = { ...defaultDetail, id: 'c-2', name: 'WTR Denver', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' }
+    const detail1 = { ...defaultDetail, id: 'c-1', name: 'WTR Lincoln' }
+    const detail2 = { ...defaultDetail, id: 'c-2', name: 'WTR Denver' }
 
     const services = makeServices({
-      conferences: [
-        { id: 'c-1', name: 'WTR Lincoln', archived: false, ministryActivity: null, eventType: null },
-        { id: 'c-2', name: 'WTR Denver', archived: false, ministryActivity: null, eventType: null },
-      ],
+      conferenceIds: ['c-1', 'c-2'],
       conferenceDetails: { 'c-1': detail1, 'c-2': detail2 },
       insertResult: { successCount: 2, errorCount: 0, errors: [] as never[] },
     })
 
     const result = await runRegistrationsToSF(services)
 
-    // One insert call with records from both conferences
     expect(services.salesforce.insertStagingRecords).toHaveBeenCalledTimes(1)
     const insertedRecords = (services.salesforce.insertStagingRecords as ReturnType<typeof vi.fn>).mock.calls[0][0]
     expect(insertedRecords).toHaveLength(2)
@@ -305,6 +193,20 @@ describe('runRegistrationsToSF', () => {
 
     expect(services.ssm.updateLastImportDate).toHaveBeenCalledWith(result.runStartTime)
     expect(new Date(result.runStartTime).toISOString()).toBe(result.runStartTime)
+  })
+
+  it('continues processing when some conference details fail to fetch', async () => {
+    const services = makeServices({
+      conferenceIds: ['c-1', 'c-bad'],
+      conferenceDetails: { 'c-1': defaultDetail }, // 'c-bad' is absent → rejects
+    })
+
+    const result = await runRegistrationsToSF(services)
+
+    expect(result.conferencesFound).toBe(1)
+    expect(result.conferencesProcessed).toBe(1)
+    expect(result.totalRecords).toBe(1)
+    expect(services.ssm.updateLastImportDate).toHaveBeenCalled()
   })
 
   it('skips SF insert for zero records but still advances cursor', async () => {
