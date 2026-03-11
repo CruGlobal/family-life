@@ -47,8 +47,8 @@ describe('config', () => {
     const config = getConfig()
 
     expect(config.environment).toBe('sandbox')
-    expect(config.ertMinistryName).toBe('Family Life')
-    expect(config.ertActivityName).toBe('WTR')
+    expect(config.ertMinistryId).toBe('9f63db46-6ca9-43b0-868a-23326b3c4d91')
+    expect(config.ertActivityId).toBe('9c6eae3f-8928-4703-a2a4-e5bf995dfd19')
     expect(config.registrationPageSize).toBe(100)
     expect(config.sfBatchSize).toBe(200)
   })

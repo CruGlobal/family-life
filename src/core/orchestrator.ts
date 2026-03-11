@@ -27,19 +27,19 @@ export async function runRegistrationsToSF(services: Services): Promise<Registra
   // 2. Find FamilyLife ministry and WTR activity
   const ministries = await services.ert.getMinistries()
 
-  const ministry = ministries.find(m => m.name === config.ertMinistryName)
+  const ministry = ministries.find(m => m.id === config.ertMinistryId)
   if (!ministry) {
-    throw new Error(`Ministry "${config.ertMinistryName}" not found in ERT`)
+    throw new Error(`Ministry "${config.ertMinistryId}" not found in ERT`)
   }
 
   if (!ministry.activities || ministry.activities.length === 0) {
-    throw new Error(`Ministry "${config.ertMinistryName}" has no activities`)
+    throw new Error(`Ministry "${config.ertMinistryId}" has no activities`)
   }
 
-  const wtrActivity = ministry.activities.find(a => a.name === config.ertActivityName)
+  const wtrActivity = ministry.activities.find(a => a.id === config.ertActivityId)
   if (!wtrActivity) {
     throw new Error(
-      `Activity "${config.ertActivityName}" not found in ministry "${config.ertMinistryName}"`
+      `Activity "${config.ertActivityId}" not found in ministry "${config.ertMinistryId}"`
     )
   }
 

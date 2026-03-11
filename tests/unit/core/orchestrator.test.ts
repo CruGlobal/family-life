@@ -12,8 +12,8 @@ describe('runRegistrationsToSF', () => {
     process.env.SF_CLIENT_ID = 'sf-id'
     process.env.SF_CLIENT_SECRET = 'sf-secret'
     process.env.SSM_LAST_IMPORT_DATE_PARAM = '/test/param'
-    process.env.ERT_MINISTRY_NAME = 'Family Life'
-    process.env.ERT_ACTIVITY_NAME = 'WTR'
+    process.env.ERT_MINISTRY_ID = '9f63db46-6ca9-43b0-868a-23326b3c4d91'
+    process.env.ERT_ACTIVITY_ID = '9c6eae3f-8928-4703-a2a4-e5bf995dfd19'
   })
 
   afterEach(() => {
@@ -25,8 +25,8 @@ describe('runRegistrationsToSF', () => {
     name: 'WTR Lincoln',
     abbreviation: 'WTR26LNK1',
     archived: false,
-    ministry: 'm-1',
-    ministryActivity: 'a-wtr',
+    ministry: '9f63db46-6ca9-43b0-868a-23326b3c4d91',
+    ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19',
     eventType: '0f87dff6-0115-4d86-8bc7-5e785334b3e2',
     eventStartTime: '2026-03-15T18:00:00',
     eventEndTime: '2026-03-17T12:00:00',
@@ -47,9 +47,9 @@ describe('runRegistrationsToSF', () => {
   }> = {}): Services {
     const ministries = overrides.ministries ?? [
       {
-        id: 'm-1',
+        id: '9f63db46-6ca9-43b0-868a-23326b3c4d91',
         name: 'Family Life',
-        activities: [{ id: 'a-wtr', name: 'WTR' }],
+        activities: [{ id: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19', name: 'WTR' }],
       },
     ]
     const conferences = overrides.conferences ?? [
@@ -58,7 +58,7 @@ describe('runRegistrationsToSF', () => {
         name: 'WTR Lincoln',
         abbreviation: 'WTR26LNK1',
         archived: false,
-        ministry: 'm-1',
+        ministry: '9f63db46-6ca9-43b0-868a-23326b3c4d91',
         ministryActivity: null,
         eventType: null,
         eventStartTime: '2026-03-15T18:00:00',
@@ -135,15 +135,15 @@ describe('runRegistrationsToSF', () => {
 
   it('throws when ministry not found', async () => {
     const services = makeServices({
-      ministries: [{ id: 'm-1', name: 'OtherMinistry', activities: [] }],
+      ministries: [{ id: 'other-id', name: 'OtherMinistry', activities: [] }],
     })
 
-    await expect(runRegistrationsToSF(services)).rejects.toThrow('Ministry "Family Life" not found')
+    await expect(runRegistrationsToSF(services)).rejects.toThrow('Ministry "9f63db46-6ca9-43b0-868a-23326b3c4d91" not found')
   })
 
   it('throws when ministry has no activities', async () => {
     const services = makeServices({
-      ministries: [{ id: 'm-1', name: 'Family Life', activities: [] }],
+      ministries: [{ id: '9f63db46-6ca9-43b0-868a-23326b3c4d91', name: 'Family Life', activities: [] }],
     })
 
     await expect(runRegistrationsToSF(services)).rejects.toThrow('has no activities')
@@ -152,11 +152,11 @@ describe('runRegistrationsToSF', () => {
   it('throws when WTR activity not found', async () => {
     const services = makeServices({
       ministries: [
-        { id: 'm-1', name: 'Family Life', activities: [{ id: 'a-other', name: 'Other' }] },
+        { id: '9f63db46-6ca9-43b0-868a-23326b3c4d91', name: 'Family Life', activities: [{ id: 'a-other', name: 'Other' }] },
       ],
     })
 
-    await expect(runRegistrationsToSF(services)).rejects.toThrow('Activity "WTR" not found')
+    await expect(runRegistrationsToSF(services)).rejects.toThrow('Activity "9c6eae3f-8928-4703-a2a4-e5bf995dfd19" not found')
   })
 
   it('filters out archived conferences', async () => {
@@ -207,7 +207,7 @@ describe('runRegistrationsToSF', () => {
         },
       ],
       conferenceDetails: {
-        'c-1': { ...defaultDetail, id: 'c-1', name: 'WTR conf', ministryActivity: 'a-wtr' },
+        'c-1': { ...defaultDetail, id: 'c-1', name: 'WTR conf', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' },
         'c-2': { ...defaultDetail, id: 'c-2', name: 'Other conf', ministryActivity: 'a-other' },
       },
     })
@@ -217,8 +217,8 @@ describe('runRegistrationsToSF', () => {
   })
 
   it('aborts entire run when any conference gather fails', async () => {
-    const goodDetail = { ...defaultDetail, id: 'c-1', name: 'Good conf', ministryActivity: 'a-wtr' }
-    const badDetail = { ...defaultDetail, id: 'c-2', name: 'Bad conf', ministryActivity: 'a-wtr' }
+    const goodDetail = { ...defaultDetail, id: 'c-1', name: 'Good conf', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' }
+    const badDetail = { ...defaultDetail, id: 'c-2', name: 'Bad conf', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' }
 
     const services = makeServices({
       conferences: [
@@ -277,8 +277,8 @@ describe('runRegistrationsToSF', () => {
   })
 
   it('combines records from multiple conferences into one insert call', async () => {
-    const detail1 = { ...defaultDetail, id: 'c-1', name: 'WTR Lincoln', ministryActivity: 'a-wtr' }
-    const detail2 = { ...defaultDetail, id: 'c-2', name: 'WTR Denver', ministryActivity: 'a-wtr' }
+    const detail1 = { ...defaultDetail, id: 'c-1', name: 'WTR Lincoln', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' }
+    const detail2 = { ...defaultDetail, id: 'c-2', name: 'WTR Denver', ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19' }
 
     const services = makeServices({
       conferences: [
