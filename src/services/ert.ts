@@ -1,7 +1,5 @@
 import { getConfig } from '../config/index.js'
 import type {
-  ERTMinistry,
-  ERTConferenceSummary,
   ERTConferenceDetail,
   ERTRegistration,
   ERTPaginatedResponse,
@@ -53,16 +51,11 @@ export class ErtService {
     return response.json() as Promise<T>
   }
 
-  async getMinistries(): Promise<ERTMinistry[]> {
-    return this.request<ERTMinistry[]>('/ministries')
-  }
-
-  async getConferences(ministryId: string, eventTypeId?: string): Promise<ERTConferenceSummary[]> {
-    const params: Record<string, string> = { ministries: ministryId }
-    if (eventTypeId) {
-      params.eventTypes = eventTypeId
-    }
-    return this.request<ERTConferenceSummary[]>('/conferences', params)
+  async getConferenceIds(ministryId: string, activityId: string): Promise<string[]> {
+    return this.request<string[]>('/integrations/conferences', {
+      ministries: ministryId,
+      ministryActivities: activityId,
+    })
   }
 
   async getConferenceDetail(conferenceId: string): Promise<ERTConferenceDetail> {
