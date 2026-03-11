@@ -17,9 +17,11 @@ GET /integrations/conferences?ministries={ministryId}&ministryActivities={activi
 
 Response: `string[]` (array of conference ID UUIDs)
 
-The ministry ID and activity ID for FamilyLife WTR are known constants:
+The ministry ID and activity ID for FamilyLife WTR are known constants (provided by Ben):
 - Ministry: `9f63db46-6ca9-43b0-868a-23326b3c4d91`
 - Ministry Activity: `9c6eae3f-8928-4703-a2a4-e5bf995dfd19`
+
+Note: The ministry UUID matches what was previously used as `WTR_EVENT_TYPE_ID` in the orchestrator. These are the values Ben specified for the new endpoint's query parameters.
 
 ## Changes
 
@@ -52,17 +54,26 @@ The `WTR_EVENT_TYPE_ID` constant and all ministry/activity name-matching logic a
 Remove types that are no longer referenced:
 - `ERTMinistry`
 - `ERTMinistryActivity`
+- `ERTEventType` (only referenced as a field on `ERTMinistry`)
 - `ERTConferenceSummary`
 
-Keep: `ERTConferenceDetail`, `ERTEventType`, `ERTBlock`, `ERTRegistration`, `ERTRegistrant`, `ERTAnswer`, `ERTPaginatedResponse`, and all other types used by conference processing.
+Keep: `ERTConferenceDetail`, `ERTBlock`, `ERTRegistration`, `ERTRegistrant`, `ERTAnswer`, `ERTPaginatedResponse`, and all other types used by conference processing.
 
 ### 5. Tests
 
-- Update orchestrator tests to mock the new `getConferenceIds()` method instead of `getMinistries()` + `getConferences()`
-- Update ERT service tests: remove tests for `getMinistries()` and `getConferences()`, add test for `getConferenceIds()`
-- Update config tests for new env vars
-- Remove conference fixture factories only if no longer used (check first)
-- `makeConferenceSummary()` fixture can be removed if unused after changes
+**Orchestrator tests** (`tests/unit/core/orchestrator.test.ts`):
+- Replace `getMinistries` and `getConferences` mocks with `getConferenceIds` mock
+- Delete test cases for removed code paths: "ministry not found", "ministry has no activities", "WTR activity not found", "filters out archived conferences"
+- Replace `ERT_MINISTRY_NAME`/`ERT_ACTIVITY_NAME` env vars in `beforeEach` with `ERT_MINISTRY_ID`/`ERT_ACTIVITY_ID`
+- Update the `makeServices()` helper: add `getConferenceIds`, remove `getMinistries`/`getConferences`
+
+**ERT service tests** (`tests/unit/services/ert.test.ts`):
+- Remove tests for `getMinistries()` and `getConferences()`
+- Add test for `getConferenceIds()`
+
+**Config tests**: Update for new env vars.
+
+**Fixtures**: Remove `makeConferenceSummary()` from `tests/fixtures/conferences.ts` (currently unused by any test).
 
 ### 6. Environment / Deployment
 
