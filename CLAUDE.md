@@ -79,6 +79,14 @@ Rollbar enabled only in `staging`/`production` environments.
 - **Unused vars**: Prefix with `_` to satisfy ESLint (`argsIgnorePattern: '^_'`).
 - **`noImplicitAny: false`**: Implicit `any` is allowed but `@typescript-eslint/no-explicit-any` is warn-level.
 
+## Scripts
+
+- `scripts/run-from-date.ts` — Run the sync locally with a custom `lastImportDate` cursor (requires assumed AWS role for env vars). SSM update is stubbed.
+  ```bash
+  npx tsx scripts/run-from-date.ts <ISO-8601-date>
+  # Example: npx tsx scripts/run-from-date.ts 2026-03-11T20:00:00Z
+  ```
+
 ## Assumed Roles
 
 At the beginning of every conversation, and when resuming conversations, check the following environment variables to see if you have assumed an AWS role:
