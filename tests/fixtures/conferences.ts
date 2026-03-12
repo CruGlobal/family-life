@@ -1,21 +1,6 @@
-import type { ERTConferenceSummary, ERTConferenceDetail, ERTRegistrationPage, ERTRegistrantType } from '../../src/types/ert.js'
+import type { ERTConferenceDetail, ERTRegistrationPage, ERTRegistrantType } from '../../src/types/ert.js'
 
 const WTR_ACTIVITY_ID = 'activity-wtr-001'
-
-export function makeConferenceSummary(overrides: Partial<ERTConferenceSummary> = {}): ERTConferenceSummary {
-  return {
-    id: 'conf-001',
-    name: 'WTR26 Lincoln',
-    abbreviation: 'WTR26LNK1',
-    archived: false,
-    ministry: 'ministry-fl-001',
-    ministryActivity: WTR_ACTIVITY_ID,
-    eventType: '0f87dff6-0115-4d86-8bc7-5e785334b3e2',
-    eventStartTime: '2026-03-15T18:00:00',
-    eventEndTime: '2026-03-17T12:00:00',
-    ...overrides,
-  }
-}
 
 export function makeConferenceDetail(overrides: Partial<ERTConferenceDetail> = {}): ERTConferenceDetail {
   return {
@@ -129,5 +114,3 @@ export function makeDefaultRegistrantTypes(): ERTRegistrantType[] {
     { id: 'regtype-attendee', name: 'Individual Attendee' },
   ]
 }
-
-export { WTR_ACTIVITY_ID }

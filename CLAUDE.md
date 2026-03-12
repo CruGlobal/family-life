@@ -63,7 +63,7 @@ Rollbar enabled only in `staging`/`production` environments.
 - Vitest globals enabled — no need to import `describe`, `it`, `expect`, etc.
 - Test setup loads `.env.test` via dotenv (`tests/setup.ts`).
 - Pure function tests (answer-processor, registration-transformer, field-mapping) use fixture factories from `tests/fixtures/` — no mocking.
-- Fixture factories (all accept partial overrides): `makeRegistration()`, `makeRegistrant()`, `makeAnswer()` in `registrations.ts`; `makeConferenceSummary()`, `makeConferenceDetail()` in `conferences.ts`; `makeBlockLookups()` in `blocks.ts`.
+- Fixture factories (all accept partial overrides): `makeRegistration()`, `makeRegistrant()`, `makeAnswer()` in `registrations.ts`; `makeConferenceDetail()` in `conferences.ts`; `makeBlockLookups()` in `blocks.ts`.
 - Service tests mock `global.fetch` (ERT, SF) and `@aws-sdk/client-ssm` (SSM) via `vi.mock`.
 
 ## Deployment
@@ -78,3 +78,17 @@ Rollbar enabled only in `staging`/`production` environments.
 - **Path alias**: `@` maps to `./src` in both vitest and esbuild. Use `@/services/ert` style imports.
 - **Unused vars**: Prefix with `_` to satisfy ESLint (`argsIgnorePattern: '^_'`).
 - **`noImplicitAny: false`**: Implicit `any` is allowed but `@typescript-eslint/no-explicit-any` is warn-level.
+
+## Scripts
+
+- `scripts/run-from-date.ts` — Run the sync locally with a custom `lastImportDate` cursor (requires assumed AWS role for env vars). SSM update is stubbed.
+  ```bash
+  npx tsx scripts/run-from-date.ts <ISO-8601-date>
+  # Example: npx tsx scripts/run-from-date.ts 2026-03-11T20:00:00Z
+  ```
+
+## Assumed Roles
+
+At the beginning of every conversation, and when resuming conversations, check the following environment variables to see if you have assumed an AWS role:
+- ENVIRONMENT: Could be `staging` or `production`, and gives you an idea of which role you have assumed.
+- AWS_ACCESS_KEY_ID: If set with a value length > 0, means you have actually assumed the role.

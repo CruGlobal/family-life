@@ -11,8 +11,7 @@ function mockServices(overrides: Partial<{
 
   return {
     ert: {
-      getMinistries: vi.fn(),
-      getConferences: vi.fn(),
+      getConferenceIds: vi.fn(),
       getConferenceDetail: vi.fn(),
       getRegistrations: vi.fn(),
       getAllRegistrations: vi.fn().mockResolvedValue(registrations),

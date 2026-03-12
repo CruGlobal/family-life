@@ -20,57 +20,6 @@ describe('ErtService', () => {
     resetConfig()
   })
 
-  it('getMinistries calls correct endpoint with auth header', async () => {
-    const mockData = [{ id: '1', name: 'FamilyLife', activities: [] }]
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockData),
-    })
-
-    const svc = new ErtService()
-    const result = await svc.getMinistries()
-
-    expect(result).toEqual(mockData)
-    expect(global.fetch).toHaveBeenCalledWith(
-      'https://api.test.com/rest/ministries',
-      expect.objectContaining({
-        headers: {
-          Authorization: 'test-api-key',
-          Accept: 'application/json',
-        },
-      })
-    )
-  })
-
-  it('getConferences passes ministry and eventType params', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([]),
-    })
-
-    const svc = new ErtService()
-    await svc.getConferences('m-1', 'et-1')
-
-    const calledUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]
-    expect(calledUrl).toContain('/conferences')
-    expect(calledUrl).toContain('ministries=m-1')
-    expect(calledUrl).toContain('eventTypes=et-1')
-  })
-
-  it('getConferences omits eventTypes when not provided', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([]),
-    })
-
-    const svc = new ErtService()
-    await svc.getConferences('m-1')
-
-    const calledUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]
-    expect(calledUrl).toContain('ministries=m-1')
-    expect(calledUrl).not.toContain('eventTypes')
-  })
-
   it('getConferenceDetail fetches by conferenceId', async () => {
     const detail = { id: 'c-1', name: 'Test', registrationPages: [] }
     global.fetch = vi.fn().mockResolvedValue({
@@ -133,6 +82,23 @@ describe('ErtService', () => {
     expect(result[1].id).toBe('r2')
   })
 
+  it('getConferenceIds calls integrations endpoint with ministry and activity params', async () => {
+    const mockIds = ['conf-1', 'conf-2', 'conf-3']
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockIds),
+    })
+
+    const svc = new ErtService()
+    const result = await svc.getConferenceIds('m-1', 'a-1')
+
+    expect(result).toEqual(mockIds)
+    const calledUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(calledUrl).toContain('/integrations/conferences')
+    expect(calledUrl).toContain('ministries=m-1')
+    expect(calledUrl).toContain('ministryActivities=a-1')
+  })
+
   it('throws on non-OK response', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
@@ -141,6 +107,6 @@ describe('ErtService', () => {
     })
 
     const svc = new ErtService()
-    await expect(svc.getMinistries()).rejects.toThrow('ERT API error 500')
+    await expect(svc.getConferenceIds('m-1', 'a-1')).rejects.toThrow('ERT API error 500')
   })
 })

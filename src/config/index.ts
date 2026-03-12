@@ -4,8 +4,8 @@ export interface Config {
   // ERT
   ertBaseUrl: string
   ertApiKey: string
-  ertMinistryName: string
-  ertActivityName: string
+  ertMinistryId: string
+  ertActivityId: string
 
   // Salesforce
   sfLoginUrl: string
@@ -46,8 +46,8 @@ export function getConfig(): Config {
 
     ertBaseUrl: requireEnv('ERT_BASE_URL'),
     ertApiKey: requireEnv('ERT_API_KEY'),
-    ertMinistryName: process.env.ERT_MINISTRY_NAME || 'Family Life',
-    ertActivityName: process.env.ERT_ACTIVITY_NAME || 'WTR',
+    ertMinistryId: process.env.ERT_MINISTRY_ID || '9f63db46-6ca9-43b0-868a-23326b3c4d91',
+    ertActivityId: process.env.ERT_ACTIVITY_ID || '9c6eae3f-8928-4703-a2a4-e5bf995dfd19',
 
     sfLoginUrl: requireEnv('SF_LOGIN_URL'),
     sfClientId: requireEnv('SF_CLIENT_ID'),
