@@ -52,9 +52,21 @@ export async function runRegistrationsToSF(services: Services): Promise<Registra
     })
   }
 
+  // 3b. Filter to only WTR conferences by abbreviation
+  const wtrDetails = details.filter(d => d.abbreviation?.startsWith('WTR'))
+
+  if (wtrDetails.length < details.length) {
+    const skipped = details.length - wtrDetails.length
+    logger.info('Filtered non-WTR conferences', {
+      total: details.length,
+      wtr: wtrDetails.length,
+      skipped,
+    })
+  }
+
   // 4. Gather records from all conferences (parallel, but any failure aborts the run)
   const gatherResults = await Promise.allSettled(
-    details.map(detail =>
+    wtrDetails.map(detail =>
       processConference(detail, lastImportDate, services)
     )
   )
@@ -63,7 +75,7 @@ export async function runRegistrationsToSF(services: Services): Promise<Registra
   const gatherErrors: Array<{ conferenceId: string; error: string }> = []
 
   gatherResults.forEach((result, index) => {
-    const detail = details[index]
+    const detail = wtrDetails[index]
     if (result.status === 'fulfilled') {
       conferenceResults.push(result.value)
     } else {
@@ -100,7 +112,7 @@ export async function runRegistrationsToSF(services: Services): Promise<Registra
   const syncResult: RegistrationsToSFResult = {
     runStartTime,
     lastImportDate,
-    conferencesFound: details.length,
+    conferencesFound: wtrDetails.length,
     conferencesProcessed: conferenceResults.length,
     totalRecords: allRecords.length,
     conferenceResults,

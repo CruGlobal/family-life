@@ -66,7 +66,7 @@ export function processAnswers(
 
       case 'PHONE':
         if (answer.value) {
-          const phone = String(answer.value)
+          const phone = String(answer.value).replace(/\s/g, '')
           result.phone = phone.startsWith('+1')
             ? phone.substring(2).trim()
             : phone

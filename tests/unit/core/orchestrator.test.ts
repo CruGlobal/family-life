@@ -209,6 +209,37 @@ describe('runRegistrationsToSF', () => {
     expect(services.ssm.updateLastImportDate).toHaveBeenCalled()
   })
 
+  it('filters out non-WTR conferences by abbreviation', async () => {
+    const wtrDetail = { ...defaultDetail, id: 'c-1', abbreviation: 'WTR26LNK1' }
+    const nonWtrDetail = { ...defaultDetail, id: 'c-2', abbreviation: 'LACFL26', name: 'CONGRESO LAC' }
+
+    const services = makeServices({
+      conferenceIds: ['c-1', 'c-2'],
+      conferenceDetails: { 'c-1': wtrDetail, 'c-2': nonWtrDetail },
+    })
+
+    const result = await runRegistrationsToSF(services)
+
+    expect(result.conferencesFound).toBe(1)
+    expect(result.conferencesProcessed).toBe(1)
+    expect(services.ert.getAllRegistrations).toHaveBeenCalledTimes(1)
+  })
+
+  it('filters out conferences with null abbreviation', async () => {
+    const wtrDetail = { ...defaultDetail, id: 'c-1', abbreviation: 'WTR26LNK1' }
+    const nullAbbrDetail = { ...defaultDetail, id: 'c-2', abbreviation: null, name: 'No Abbreviation' }
+
+    const services = makeServices({
+      conferenceIds: ['c-1', 'c-2'],
+      conferenceDetails: { 'c-1': wtrDetail, 'c-2': nullAbbrDetail },
+    })
+
+    const result = await runRegistrationsToSF(services)
+
+    expect(result.conferencesFound).toBe(1)
+    expect(result.conferencesProcessed).toBe(1)
+  })
+
   it('skips SF insert for zero records but still advances cursor', async () => {
     const services = makeServices({ registrations: [] })
     ;(services.salesforce.insertStagingRecords as ReturnType<typeof vi.fn>).mockResolvedValue(

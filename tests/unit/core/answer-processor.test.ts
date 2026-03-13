@@ -74,7 +74,7 @@ describe('processAnswers', () => {
   })
 
   describe('PHONE profileType', () => {
-    it('strips +1 prefix from US numbers', () => {
+    it('strips +1 prefix and spaces from US numbers', () => {
       const answers = [
         makeAnswer({
           blockId: 'block-phone-001',
@@ -86,7 +86,7 @@ describe('processAnswers', () => {
       expect(result.phone).toBe('555-123-4567')
     })
 
-    it('keeps non-US numbers as-is', () => {
+    it('strips spaces from non-US numbers', () => {
       const answers = [
         makeAnswer({
           blockId: 'block-phone-001',
@@ -108,6 +108,18 @@ describe('processAnswers', () => {
 
       const result = processAnswers(answers, lookups, false, false)
       expect(result.phone).toBe('5551234567')
+    })
+
+    it('strips spaces from international numbers', () => {
+      const answers = [
+        makeAnswer({
+          blockId: 'block-phone-001',
+          value: '+54 9 11 6884-2575',
+        }),
+      ]
+
+      const result = processAnswers(answers, lookups, false, false)
+      expect(result.phone).toBe('+549116884-2575')
     })
   })
 
