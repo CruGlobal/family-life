@@ -58,6 +58,7 @@ describe('runRegistrationsToSF', () => {
         remainingBalance: 0,
         pastPayments: [],
         promotions: [],
+        globalPromotions: [],
         registrants: [
           {
             id: 'rg-1',

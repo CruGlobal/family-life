@@ -139,9 +139,10 @@ export function transformRegistrant(
     }
   }
 
-  // Promo code
-  if (registration.promotions && registration.promotions.length > 0) {
-    record.Promo_Code__c = registration.promotions[0].code || ''
+  // Promo code (prefer globalPromotions, fall back to promotions)
+  const promo = registration.globalPromotions?.[0] || registration.promotions?.[0]
+  if (promo) {
+    record.Promo_Code__c = promo.code || ''
   }
 
   // Waiver
