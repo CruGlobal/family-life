@@ -56,6 +56,7 @@ export interface ERTRegistration {
   remainingBalance: number
   pastPayments: ERTPayment[]
   promotions: ERTPromotion[]
+  globalPromotions: ERTPromotion[]
   registrants: ERTRegistrant[]
 }
 
