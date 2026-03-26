@@ -282,8 +282,23 @@ describe('transformRegistrant', () => {
       expect(record.GiftCardGlCode__c).toBe('GL-123')
     })
 
-    it('extracts promo code from first promotion', () => {
+    it('prefers globalPromotions over promotions', () => {
       const reg = makeRegistration({
+        globalPromotions: [
+          { code: 'GLOBAL100', description: 'Global promo' },
+        ],
+        promotions: [
+          { code: 'EARLYBIRD', description: 'Early bird discount' },
+        ],
+      })
+      const record = transformRegistrant(reg, makeRegistrant(), makeContext())!
+
+      expect(record.Promo_Code__c).toBe('GLOBAL100')
+    })
+
+    it('falls back to promotions when globalPromotions is empty', () => {
+      const reg = makeRegistration({
+        globalPromotions: [],
         promotions: [
           { code: 'EARLYBIRD', description: 'Early bird discount' },
           { code: 'ANOTHER', description: 'Another promo' },

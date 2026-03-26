@@ -13,6 +13,7 @@ export function makeRegistration(overrides: Partial<ERTRegistration> = {}): ERTR
     remainingBalance: 0,
     pastPayments: [],
     promotions: [],
+    globalPromotions: [],
     registrants: [makeRegistrant()],
     ...overrides,
   }
