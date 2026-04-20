@@ -134,6 +134,7 @@ describe('processAnswers', () => {
             city: 'Springfield',
             state: 'IL',
             zip: '62701',
+            country: 'US',
           },
         }),
       ]
@@ -145,6 +146,7 @@ describe('processAnswers', () => {
         city: 'Springfield',
         state: 'IL',
         zip: '62701',
+        country: 'US',
       })
     })
 
@@ -165,6 +167,7 @@ describe('processAnswers', () => {
       const result = processAnswers(answers, lookups, false, false)
       expect(result.address?.address2).toBeUndefined()
       expect(result.address?.state).toBeUndefined()
+      expect(result.address?.country).toBeUndefined()
     })
   })
 

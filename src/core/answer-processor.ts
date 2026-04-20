@@ -18,6 +18,7 @@ export interface AnswerProcessingResult {
     city?: string
     state?: string
     zip?: string
+    country?: string
   }
   smsOptIn?: string
   smsKeyword?: string
@@ -82,6 +83,7 @@ export function processAnswers(
             city: addr.city || undefined,
             state: addr.state || undefined,
             zip: addr.zip || undefined,
+            country: addr.country || undefined,
           }
         }
         break

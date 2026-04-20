@@ -326,6 +326,53 @@ describe('transformRegistrant', () => {
     })
   })
 
+  describe('mailing address', () => {
+    it('maps all mailing address fields from ADDRESS answer', () => {
+      const registrant = makeRegistrant({
+        answers: [
+          makeAnswer({
+            blockId: 'block-address-001',
+            value: {
+              address1: '123 Main St',
+              address2: 'Apt 4',
+              city: 'Springfield',
+              state: 'IL',
+              zip: '62701',
+              country: 'US',
+            },
+          }),
+        ],
+      })
+      const record = transformRegistrant(makeRegistration(), registrant, makeContext())!
+
+      expect(record.Mailing_Street__c).toBe('123 Main St')
+      expect(record.Mailing_Address_Line_2__c).toBe('Apt 4')
+      expect(record.Mailing_City__c).toBe('Springfield')
+      expect(record.Mailing_State__c).toBe('IL')
+      expect(record.Mailing_Postal_Code__c).toBe('62701')
+      expect(record.Mailing_Country__c).toBe('US')
+    })
+
+    it('omits Mailing_Country__c when country is absent', () => {
+      const registrant = makeRegistrant({
+        answers: [
+          makeAnswer({
+            blockId: 'block-address-001',
+            value: {
+              address1: '123 Main St',
+              city: 'Springfield',
+              state: 'IL',
+              zip: '62701',
+            },
+          }),
+        ],
+      })
+      const record = transformRegistrant(makeRegistration(), registrant, makeContext())!
+
+      expect(record.Mailing_Country__c).toBeUndefined()
+    })
+  })
+
   describe('tag fields in output', () => {
     it('includes church address decomposed fields', () => {
       const registrant = makeRegistrant({
