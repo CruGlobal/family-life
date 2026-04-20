@@ -22,6 +22,7 @@ export interface StagingInvolvementRecord {
   Mailing_City__c?: string
   Mailing_State__c?: string
   Mailing_Postal_Code__c?: string
+  Mailing_Country__c?: string
 
   // Registration fields
   Involvement_Status__c: string

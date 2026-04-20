@@ -103,6 +103,7 @@ export function transformRegistrant(
     if (answerResult.address.city) record.Mailing_City__c = answerResult.address.city
     if (answerResult.address.state) record.Mailing_State__c = answerResult.address.state
     if (answerResult.address.zip) record.Mailing_Postal_Code__c = answerResult.address.zip
+    if (answerResult.address.country) record.Mailing_Country__c = answerResult.address.country
   }
 
   // Registration type
