@@ -18,18 +18,71 @@ export const TAG_TO_SF_FIELD: Record<string, string> = {
 
 // Structured tag that decomposes into multiple SF fields
 /**
- * Maximum length of SF string fields that receive free-text input. An
- * over-length value fails the whole allOrNone insert, blocking every record in
- * the run — not just the offending one — so values are truncated to fit.
+ * Maximum length of every string field on Staging_Involvement__c that this sync
+ * writes. An over-length value fails the whole allOrNone insert, blocking every
+ * record in the run — not just the offending one — so values are truncated to fit.
  *
- * Only fields whose limit has been confirmed against Salesforce belong here; a
- * guessed limit would silently truncate valid data. Fields absent from this map
- * are passed through untouched.
+ * Generated from the production describe endpoint
+ * (/services/data/v62.0/sobjects/Staging_Involvement__c/describe) on 2026-07-28.
+ * Date, currency and boolean fields are absent because they carry no length.
+ *
+ * Regenerate after any SF schema change rather than editing by hand — a guessed
+ * limit silently truncates valid data.
  */
 export const SF_FIELD_MAX_LENGTHS: Readonly<Record<string, number>> = {
-  Group_Name__c: 100,
+  Branch_of_Service__c: 100,
+  Church_Affiliation__c: 255,
+  Church_Attendance__c: 255,
+  Church_City__c: 255,
+  Church_Country__c: 100,
+  Church_Name__c: 255,
+  Church_Phone__c: 50,
   Church_Position__c: 100,
+  Church_Postal_Code__c: 20,
+  Church_State__c: 255,
+  Church_Street__c: 255,
+  Church_Street_2__c: 255,
+  Church_Website__c: 255,
+  Contact_External_Id__c: 255,
+  Email_Address__c: 255,
+  Email_Subscription_List__c: 100,
+  Event_External_Id__c: 255,
+  Event_Id__c: 255,
+  Event_Location__c: 255,
+  Event_Name__c: 255,
+  Event_Sponsor_Staff_Email__c: 255,
+  Event_Sponsor_Staff_Name__c: 255,
+  Event_Type__c: 255,
+  First_Name__c: 255,
+  FL_Involvement__c: 1000,
+  GiftCardAssociatedProduct__c: 100,
+  GiftCardGlCode__c: 50,
+  GiftCardId__c: 255,
+  GiftCardValue__c: 50,
+  Group_Name__c: 80,
+  Involvement_External_Id__c: 255,
+  Involvement_Registration_Type__c: 255,
+  Involvement_Status__c: 255,
+  Last_Name__c: 255,
   Local_Phone_Number__c: 15,
+  Mailing_Address_Line_2__c: 100,
+  Mailing_City__c: 255,
+  Mailing_Country__c: 50,
+  Mailing_Postal_Code__c: 25,
+  Mailing_State__c: 255,
+  Mailing_Street__c: 255,
+  Military_Location__c: 255,
+  Payment_Type__c: 100,
+  Previous_WTR_Attendee__c: 100,
+  Promo_Code__c: 100,
+  Referral__c: 1000,
+  Registrant_Type__c: 100,
+  SMS_Keyword__c: 25,
+  Source__c: 255,
+  Staging_Type__c: 255,
+  Status__c: 255,
+  Title__c: 50,
+  Waiver__c: 50,
 }
 
 export const CHURCH_ADDRESS_TAG = 'fl_church_addresss' // note: triple 's' in ERT
