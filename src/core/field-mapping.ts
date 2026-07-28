@@ -17,6 +17,14 @@ export const TAG_TO_SF_FIELD: Record<string, string> = {
 }
 
 // Structured tag that decomposes into multiple SF fields
+// Tag fields answered as free text whose SF column is a 100-char string. An
+// over-length value fails the whole allOrNone insert, blocking every record in
+// the run — not just the offending one.
+export const MAX_LENGTH_100_FIELDS: ReadonlySet<string> = new Set([
+  'Group_Name__c',
+  'Church_Position__c',
+])
+
 export const CHURCH_ADDRESS_TAG = 'fl_church_addresss' // note: triple 's' in ERT
 
 export const CHURCH_ADDRESS_FIELD_MAP: Record<string, string> = {
