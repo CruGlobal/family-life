@@ -413,6 +413,82 @@ describe('transformRegistrant', () => {
     })
   })
 
+  describe('field length enforcement', () => {
+    const longPositionLookups = makeBlockLookups({
+      profileTypeLookup: { 'block-church-pos-001': null },
+      tagNameLookup: { 'block-church-pos-001': 'fl_church_position' },
+    })
+
+    it('truncates an over-length field to its SF max', () => {
+      const longPosition = 'A'.repeat(250)
+      const registrant = makeRegistrant({
+        answers: [makeAnswer({ blockId: 'block-church-pos-001', value: longPosition })],
+      })
+
+      const record = transformRegistrant(
+        makeRegistration(),
+        registrant,
+        makeContext({ lookups: longPositionLookups })
+      )!
+
+      expect(record.Church_Position__c).toBe('A'.repeat(100))
+    })
+
+    it('leaves a field within its SF max untouched', () => {
+      const registrant = makeRegistrant({
+        answers: [makeAnswer({ blockId: 'block-church-pos-001', value: 'Senior Pastor' })],
+      })
+
+      const record = transformRegistrant(
+        makeRegistration(),
+        registrant,
+        makeContext({ lookups: longPositionLookups })
+      )!
+
+      expect(record.Church_Position__c).toBe('Senior Pastor')
+    })
+
+    it('truncates the real over-length Church Position that broke prod', () => {
+      const longPosition = 'We just returned from 17 years of overseas missions and are ' +
+        'working from a parachurch missions organization. I also just stepped down from ' +
+        'pastoring an overseas church plant. Does this qualify?'
+      const registrant = makeRegistrant({
+        answers: [makeAnswer({ blockId: 'block-church-pos-001', value: longPosition })],
+      })
+
+      const record = transformRegistrant(
+        makeRegistration(),
+        registrant,
+        makeContext({ lookups: longPositionLookups })
+      )!
+
+      expect(longPosition.length).toBeGreaterThan(100)
+      expect(record.Church_Position__c).toHaveLength(100)
+      expect(record.Church_Position__c).toBe(longPosition.substring(0, 100))
+    })
+
+    it('truncates Group_Name__c to 100 chars', () => {
+      const registrant = makeRegistrant({
+        answers: [makeAnswer({ blockId: 'block-group-001', value: 'A'.repeat(150) })],
+      })
+
+      const record = transformRegistrant(makeRegistration(), registrant, makeContext())!
+
+      expect(record.Group_Name__c).toBe('A'.repeat(100))
+    })
+
+    it('leaves fields with no configured max untouched', () => {
+      const longTitle = 'B'.repeat(300)
+      const registrant = makeRegistrant({
+        answers: [makeAnswer({ blockId: 'block-title-001', value: longTitle })],
+      })
+
+      const record = transformRegistrant(makeRegistration(), registrant, makeContext())!
+
+      expect(record.Title__c).toBe(longTitle)
+    })
+  })
+
   describe('opt-in fields', () => {
     it('includes opt-in fields from OPPORTUNITIES answer', () => {
       const registrant = makeRegistrant({
