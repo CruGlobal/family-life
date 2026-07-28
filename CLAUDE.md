@@ -49,7 +49,8 @@ Services are created via `createServices()` which returns a `Services` type used
 - **Status calculation**: completed+withdrawn=Canceled, completed+checkedIn=Attended, completed=Registered, else Incomplete.
 - **FL Registration Type**: Prefer `fl_registration_type` tag answer, fall back to parsing registrant type name (Military/Pastor/Attendee).
 - **Church address tag**: Note triple 's' in `fl_church_addresss` — this is the actual ERT tag name, not a typo.
-- **Group_Name__c**: Truncated to 100 characters.
+- **Field lengths**: All string fields are truncated to their real SF column length by `enforceFieldLengths` in `registration-transformer.ts`, driven by `SF_FIELD_MAX_LENGTHS` in `field-mapping.ts` (generated from the production describe endpoint). An over-length value fails the whole `allOrNone` insert, blocking every record in the run. Regenerate the map after SF schema changes.
+- **Phone answers**: Sanitized to digits and phone punctuation. A value still over 15 chars, or with no digits, is dropped and logged rather than truncated — a clipped phone number is a wrong one.
 
 ## Configuration
 

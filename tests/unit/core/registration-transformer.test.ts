@@ -467,25 +467,27 @@ describe('transformRegistrant', () => {
       expect(record.Church_Position__c).toBe(longPosition.substring(0, 100))
     })
 
-    it('truncates Group_Name__c to 100 chars', () => {
+    // 80, not 100: the old hard-coded 100 exceeded the real SF column, so a
+    // group name of 81-100 chars would have failed the insert the same way.
+    it('truncates Group_Name__c to its real 80-char max', () => {
       const registrant = makeRegistrant({
         answers: [makeAnswer({ blockId: 'block-group-001', value: 'A'.repeat(150) })],
       })
 
       const record = transformRegistrant(makeRegistration(), registrant, makeContext())!
 
-      expect(record.Group_Name__c).toBe('A'.repeat(100))
+      expect(record.Group_Name__c).toBe('A'.repeat(80))
     })
 
-    it('leaves fields with no configured max untouched', () => {
-      const longTitle = 'B'.repeat(300)
+    it('applies each field its own max rather than a blanket limit', () => {
       const registrant = makeRegistrant({
-        answers: [makeAnswer({ blockId: 'block-title-001', value: longTitle })],
+        answers: [makeAnswer({ blockId: 'block-title-001', value: 'B'.repeat(300) })],
       })
 
       const record = transformRegistrant(makeRegistration(), registrant, makeContext())!
 
-      expect(record.Title__c).toBe(longTitle)
+      // Title__c is 50 in SF, while Church_Position__c above is 100
+      expect(record.Title__c).toHaveLength(50)
     })
   })
 
