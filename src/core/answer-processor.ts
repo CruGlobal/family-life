@@ -3,8 +3,9 @@ import {
   TAG_TO_SF_FIELD,
   CHURCH_ADDRESS_TAG,
   CHURCH_ADDRESS_FIELD_MAP,
-  MAX_LENGTH_100_FIELDS,
+  SF_FIELD_MAX_LENGTHS,
 } from './field-mapping.js'
+import { logger } from '../utils/logging.js'
 
 export interface BlockLookups {
   titleLookup: Record<string, string>
@@ -72,10 +73,8 @@ export function processAnswers(
 
       case 'PHONE':
         if (answer.value) {
-          const phone = String(answer.value).replace(/\s/g, '')
-          result.phone = phone.startsWith('+1')
-            ? phone.substring(2).trim()
-            : phone
+          const phone = sanitizePhone(String(answer.value))
+          if (phone) result.phone = phone
         }
         break
 
@@ -107,6 +106,35 @@ export function processAnswers(
   return result
 }
 
+// Digits and the punctuation that legitimately appears in a phone number.
+// Anything else is registrant free text that ERT carried into the answer.
+const NON_PHONE_CHARS = /[^0-9+().-]/g
+
+/**
+ * Reduce a PHONE answer to a storable number, or undefined if it isn't one.
+ *
+ * Truncating is deliberately NOT used here: a clipped phone number is a wrong
+ * phone number, which is worse than an absent one. An over-length or digitless
+ * value is dropped and logged instead.
+ */
+function sanitizePhone(raw: string): string | undefined {
+  const cleaned = raw.replace(/\s/g, '').replace(NON_PHONE_CHARS, '')
+  const phone = cleaned.startsWith('+1') ? cleaned.substring(2) : cleaned
+
+  if (!/[0-9]/.test(phone)) {
+    if (raw.trim()) logger.warn('Dropping phone answer with no digits', { raw })
+    return undefined
+  }
+
+  const maxLength = SF_FIELD_MAX_LENGTHS['Local_Phone_Number__c']
+  if (maxLength !== undefined && phone.length > maxLength) {
+    logger.warn('Dropping over-length phone answer', { raw, sanitized: phone, maxLength })
+    return undefined
+  }
+
+  return phone
+}
+
 function processTagField(
   result: AnswerProcessingResult,
   tagName: string,
@@ -129,11 +157,7 @@ function processTagField(
   const sfField = TAG_TO_SF_FIELD[tagName]
   if (sfField) {
     if (value) {
-      if (MAX_LENGTH_100_FIELDS.has(sfField) && typeof value === 'string') {
-        result.tagFields[sfField] = value.substring(0, 100)
-      } else {
-        result.tagFields[sfField] = value
-      }
+      result.tagFields[sfField] = value
     } else if (!(sfField in result.tagFields)) {
       result.tagFields[sfField] = ''
     }

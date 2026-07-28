@@ -121,6 +121,56 @@ describe('processAnswers', () => {
       const result = processAnswers(answers, lookups, false, false)
       expect(result.phone).toBe('+549116884-2575')
     })
+
+    it('strips non-phone characters from the answer', () => {
+      // Real prod value: the ERT answer carried a trailing marker, and stripping
+      // whitespace fused it onto the number, overflowing SF's 15-char field.
+      const answers = [
+        makeAnswer({
+          blockId: 'block-phone-001',
+          value: '(815)245-0030 PreferredEmail',
+        }),
+      ]
+
+      const result = processAnswers(answers, lookups, false, false)
+      expect(result.phone).toBe('(815)245-0030')
+    })
+
+    it('keeps phone punctuation but drops letters', () => {
+      const answers = [
+        makeAnswer({
+          blockId: 'block-phone-001',
+          value: '+1 (303) 555.0100 ext',
+        }),
+      ]
+
+      const result = processAnswers(answers, lookups, false, false)
+      expect(result.phone).toBe('(303)555.0100')
+    })
+
+    it('omits a phone that is still too long after sanitation', () => {
+      const answers = [
+        makeAnswer({
+          blockId: 'block-phone-001',
+          value: '(815)245-0030 / (815)245-0031 / (815)245-0032',
+        }),
+      ]
+
+      const result = processAnswers(answers, lookups, false, false)
+      expect(result.phone).toBeUndefined()
+    })
+
+    it('omits a phone with no digits at all', () => {
+      const answers = [
+        makeAnswer({
+          blockId: 'block-phone-001',
+          value: 'PreferredEmail',
+        }),
+      ]
+
+      const result = processAnswers(answers, lookups, false, false)
+      expect(result.phone).toBeUndefined()
+    })
   })
 
   describe('ADDRESS profileType', () => {
@@ -244,7 +294,9 @@ describe('processAnswers', () => {
       expect(result.tagFields['Branch_of_Service__c']).toBe('Army')
     })
 
-    it('truncates fl_group_name to 100 chars', () => {
+    // Field lengths are enforced once on the finished record in the transformer,
+    // not here — see registration-transformer's "field length enforcement".
+    it('passes fl_group_name through at full length', () => {
       const longName = 'A'.repeat(150)
       const answers = [
         makeAnswer({
@@ -254,31 +306,7 @@ describe('processAnswers', () => {
       ]
 
       const result = processAnswers(answers, lookups, false, false)
-      expect(result.tagFields['Group_Name__c']).toBe('A'.repeat(100))
-    })
-
-    it('truncates fl_church_position to 100 chars', () => {
-      // Registrants answer this as free text; SF caps Church_Position__c at 100.
-      // An over-length value fails the whole allOrNone insert (prod outage 2026-07-21).
-      const longPosition = 'We just returned from 17 years of overseas missions and are ' +
-        'working from a parachurch missions organization. I also just stepped down from ' +
-        'pastoring an overseas church plant. Does this qualify?'
-      const churchPositionLookups = makeBlockLookups({
-        profileTypeLookup: { 'block-church-pos-001': null },
-        tagNameLookup: { 'block-church-pos-001': 'fl_church_position' },
-      })
-      const answers = [
-        makeAnswer({
-          blockId: 'block-church-pos-001',
-          value: longPosition,
-        }),
-      ]
-
-      const result = processAnswers(answers, churchPositionLookups, false, false)
-
-      expect(longPosition.length).toBeGreaterThan(100)
-      expect(result.tagFields['Church_Position__c']).toBe(longPosition.substring(0, 100))
-      expect(result.tagFields['Church_Position__c']).toHaveLength(100)
+      expect(result.tagFields['Group_Name__c']).toBe(longName)
     })
 
     it('leaves a short fl_church_position untouched', () => {
