@@ -1,6 +1,11 @@
 import { Connection } from 'jsforce'
 import { getConfig } from '../config/index.js'
-import type { StagingInvolvementRecord, InsertResult, CompositeResponse } from '../types/salesforce.js'
+import type {
+  StagingInvolvementRecord,
+  InsertResult,
+  CompositeResponse,
+  CompositeBodyItem,
+} from '../types/salesforce.js'
 import { logger } from '../utils/logging.js'
 
 // Composite API: up to 5 SObject Collections subrequests × 200 records = 1,000 max
@@ -102,14 +107,16 @@ export class SalesforceService {
     const result: InsertResult = { successCount: 0, errorCount: 0, errors: [] }
 
     for (const sub of response.compositeResponse) {
-      for (const item of sub.body) {
-        if (item.success) {
+      // A rolled-back subrequest returns a single error object rather than an
+      // array of per-record results.
+      const body = Array.isArray(sub.body) ? sub.body : [sub.body]
+
+      for (const item of body) {
+        if ('success' in item && item.success) {
           result.successCount++
         } else {
           result.errorCount++
-          for (const err of item.errors) {
-            errors.push(err.message)
-          }
+          errors.push(...describeCompositeError(item, sub.referenceId))
         }
       }
     }
@@ -127,6 +134,24 @@ export class SalesforceService {
 
     return result
   }
+}
+
+/**
+ * Extract human-readable messages from a failed composite body item. Handles
+ * both per-record results (`errors` array) and subrequest-level errors
+ * (`errorCode`/`message`), and never throws on an unrecognized shape — an
+ * unreadable response must not mask the underlying Salesforce failure.
+ */
+function describeCompositeError(item: CompositeBodyItem, referenceId: string): string[] {
+  if ('errors' in item && Array.isArray(item.errors) && item.errors.length > 0) {
+    return item.errors.map(err => `${referenceId}: ${err.message}`)
+  }
+
+  if ('errorCode' in item) {
+    return [`${referenceId}: [${item.errorCode}] ${item.message}`]
+  }
+
+  return [`${referenceId}: unrecognized error response: ${JSON.stringify(item)}`]
 }
 
 export function createSalesforceService(): SalesforceService {
