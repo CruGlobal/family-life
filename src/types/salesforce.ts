@@ -91,13 +91,29 @@ export interface InsertResult {
   errors: Array<{ id?: string; message: string }>
 }
 
+/** Per-record result from an SObject Collections subrequest. */
+export interface CompositeRecordResult {
+  id: string | null
+  success: boolean
+  errors: Array<{ message: string; statusCode: string }>
+}
+
+/**
+ * Subrequest-level error. Returned instead of per-record results when a
+ * subrequest never ran or was rolled back because another subrequest in the
+ * same composite (allOrNone) transaction failed — e.g. PROCESSING_HALTED.
+ * Note there is no `success` or `errors` property on this shape.
+ */
+export interface CompositeSubrequestError {
+  errorCode: string
+  message: string
+}
+
+export type CompositeBodyItem = CompositeRecordResult | CompositeSubrequestError
+
 export interface CompositeResponse {
   compositeResponse: Array<{
-    body: Array<{
-      id: string | null
-      success: boolean
-      errors: Array<{ message: string; statusCode: string }>
-    }>
+    body: CompositeBodyItem[] | CompositeBodyItem
     httpHeaders: Record<string, string>
     httpStatusCode: number
     referenceId: string
