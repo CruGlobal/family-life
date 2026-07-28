@@ -1,5 +1,10 @@
 import type { ERTAnswer, ERTAddressValue, ERTNameValue } from '../types/ert.js'
-import { TAG_TO_SF_FIELD, CHURCH_ADDRESS_TAG, CHURCH_ADDRESS_FIELD_MAP } from './field-mapping.js'
+import {
+  TAG_TO_SF_FIELD,
+  CHURCH_ADDRESS_TAG,
+  CHURCH_ADDRESS_FIELD_MAP,
+  MAX_LENGTH_100_FIELDS,
+} from './field-mapping.js'
 
 export interface BlockLookups {
   titleLookup: Record<string, string>
@@ -124,8 +129,7 @@ function processTagField(
   const sfField = TAG_TO_SF_FIELD[tagName]
   if (sfField) {
     if (value) {
-      // Truncate Group_Name__c to 100 chars
-      if (sfField === 'Group_Name__c' && typeof value === 'string') {
+      if (MAX_LENGTH_100_FIELDS.has(sfField) && typeof value === 'string') {
         result.tagFields[sfField] = value.substring(0, 100)
       } else {
         result.tagFields[sfField] = value

@@ -257,6 +257,46 @@ describe('processAnswers', () => {
       expect(result.tagFields['Group_Name__c']).toBe('A'.repeat(100))
     })
 
+    it('truncates fl_church_position to 100 chars', () => {
+      // Registrants answer this as free text; SF caps Church_Position__c at 100.
+      // An over-length value fails the whole allOrNone insert (prod outage 2026-07-21).
+      const longPosition = 'We just returned from 17 years of overseas missions and are ' +
+        'working from a parachurch missions organization. I also just stepped down from ' +
+        'pastoring an overseas church plant. Does this qualify?'
+      const churchPositionLookups = makeBlockLookups({
+        profileTypeLookup: { 'block-church-pos-001': null },
+        tagNameLookup: { 'block-church-pos-001': 'fl_church_position' },
+      })
+      const answers = [
+        makeAnswer({
+          blockId: 'block-church-pos-001',
+          value: longPosition,
+        }),
+      ]
+
+      const result = processAnswers(answers, churchPositionLookups, false, false)
+
+      expect(longPosition.length).toBeGreaterThan(100)
+      expect(result.tagFields['Church_Position__c']).toBe(longPosition.substring(0, 100))
+      expect(result.tagFields['Church_Position__c']).toHaveLength(100)
+    })
+
+    it('leaves a short fl_church_position untouched', () => {
+      const churchPositionLookups = makeBlockLookups({
+        profileTypeLookup: { 'block-church-pos-001': null },
+        tagNameLookup: { 'block-church-pos-001': 'fl_church_position' },
+      })
+      const answers = [
+        makeAnswer({
+          blockId: 'block-church-pos-001',
+          value: 'Senior Pastor',
+        }),
+      ]
+
+      const result = processAnswers(answers, churchPositionLookups, false, false)
+      expect(result.tagFields['Church_Position__c']).toBe('Senior Pastor')
+    })
+
     it('decomposes church address tag', () => {
       const answers = [
         makeAnswer({
