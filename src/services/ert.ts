@@ -173,16 +173,25 @@ export class ErtService {
       })
     }
 
-    // The count ERT reports is the only cross-check available that we fetched
-    // everything. A mismatch means records are still being missed.
+    // ERT's reported totals over-report by a small fixed amount per conference:
+    // an exhaustive sweep with no filter at all returns the same count as a
+    // filtered one (Delray 315 vs 317, Cambridge 209 vs 213, Orlando 740 vs
+    // 744), so the surplus is not reachable data and nothing is being missed.
+    //
+    // Deliberately info, not warn. This disagrees on roughly a sixth of
+    // conferences on every single run, and an alarm that always fires teaches
+    // people to ignore the log — which is how the July outage stayed hidden for
+    // seven days. Kept only as a change signal: a delta that suddenly grows is
+    // worth a look, a delta that is merely non-zero is not.
     if (
       totalRegistrantsFilter !== undefined &&
       seenRegistrants.size !== totalRegistrantsFilter
     ) {
-      logger.warn('Registrant count does not match ERT total', {
+      logger.info('ERT reported registrant count differs from fetched', {
         conferenceId,
         distinctRegistrants: seenRegistrants.size,
         totalRegistrantsFilter,
+        difference: totalRegistrantsFilter - seenRegistrants.size,
       })
     }
 

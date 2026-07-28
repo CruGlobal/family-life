@@ -129,7 +129,10 @@ describe('ErtService', () => {
     expect(calls()).toBe(2) // one page of data, one empty page to terminate
   })
 
-  it('warns when the distinct count does not match totalRegistrantsFilter', async () => {
+  // ERT's totals over-report, so a mismatch is normal and must not raise an
+  // alarm on every run — it is recorded at info as a change signal only.
+  it('records a count mismatch at info, not as a warning', async () => {
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => {})
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     mockPages(
       [[{ id: 'ra', registrants: [{ id: 'g1' }] }]],
@@ -139,10 +142,16 @@ describe('ErtService', () => {
     const svc = new ErtService()
     await svc.getAllRegistrations('c-1', '2026-01-01T00:00:00Z')
 
-    expect(warn).toHaveBeenCalledWith(
-      'Registrant count does not match ERT total',
-      expect.objectContaining({ distinctRegistrants: 1, totalRegistrantsFilter: 5 })
+    expect(info).toHaveBeenCalledWith(
+      'ERT reported registrant count differs from fetched',
+      expect.objectContaining({
+        distinctRegistrants: 1,
+        totalRegistrantsFilter: 5,
+        difference: 4,
+      })
     )
+    expect(warn).not.toHaveBeenCalled()
+    info.mockRestore()
     warn.mockRestore()
   })
 
