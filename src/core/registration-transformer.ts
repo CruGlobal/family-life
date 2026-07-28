@@ -7,7 +7,9 @@ import {
   getFLRegistrationType,
   getEventTypeName,
   toSalesforceDateTime,
+  SF_FIELD_MAX_LENGTHS,
 } from './field-mapping.js'
+import { logger } from '../utils/logging.js'
 
 export interface TransformContext {
   conference: ERTConferenceDetail
@@ -164,6 +166,31 @@ export function transformRegistrant(
     if (sfField === 'Involvement_Registration_Type__c') continue
     if (sfField === 'Title__c') continue
     ;(record as unknown as Record<string, unknown>)[sfField] = value
+  }
+
+  return enforceFieldLengths(record)
+}
+
+/**
+ * Clamp string fields to their Salesforce column length. Applied once to the
+ * finished record so every field is covered, not just the tag-derived ones.
+ *
+ * Only fields listed in SF_FIELD_MAX_LENGTHS are affected; anything else is
+ * left alone rather than guessed at.
+ */
+function enforceFieldLengths(record: StagingInvolvementRecord): StagingInvolvementRecord {
+  const fields = record as unknown as Record<string, unknown>
+
+  for (const [sfField, maxLength] of Object.entries(SF_FIELD_MAX_LENGTHS)) {
+    const value = fields[sfField]
+    if (typeof value === 'string' && value.length > maxLength) {
+      logger.warn('Truncating over-length field', {
+        field: sfField,
+        maxLength,
+        actualLength: value.length,
+      })
+      fields[sfField] = value.substring(0, maxLength)
+    }
   }
 
   return record

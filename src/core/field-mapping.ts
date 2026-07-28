@@ -17,13 +17,20 @@ export const TAG_TO_SF_FIELD: Record<string, string> = {
 }
 
 // Structured tag that decomposes into multiple SF fields
-// Tag fields answered as free text whose SF column is a 100-char string. An
-// over-length value fails the whole allOrNone insert, blocking every record in
-// the run — not just the offending one.
-export const MAX_LENGTH_100_FIELDS: ReadonlySet<string> = new Set([
-  'Group_Name__c',
-  'Church_Position__c',
-])
+/**
+ * Maximum length of SF string fields that receive free-text input. An
+ * over-length value fails the whole allOrNone insert, blocking every record in
+ * the run — not just the offending one — so values are truncated to fit.
+ *
+ * Only fields whose limit has been confirmed against Salesforce belong here; a
+ * guessed limit would silently truncate valid data. Fields absent from this map
+ * are passed through untouched.
+ */
+export const SF_FIELD_MAX_LENGTHS: Readonly<Record<string, number>> = {
+  Group_Name__c: 100,
+  Church_Position__c: 100,
+  Local_Phone_Number__c: 15,
+}
 
 export const CHURCH_ADDRESS_TAG = 'fl_church_addresss' // note: triple 's' in ERT
 
