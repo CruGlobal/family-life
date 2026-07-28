@@ -85,6 +85,38 @@ describe('SalesforceService', () => {
     }
   }
 
+  // When one subrequest fails under composite-level allOrNone, SF rolls back the
+  // others and returns their bodies as { errorCode, message } — no success, no errors.
+  function makeRolledBackResponse(): CompositeResponse {
+    return {
+      compositeResponse: [
+        {
+          body: [
+            {
+              id: null,
+              success: false,
+              errors: [{ message: 'Required field missing', statusCode: 'REQUIRED_FIELD_MISSING' }],
+            },
+          ],
+          httpHeaders: {},
+          httpStatusCode: 400,
+          referenceId: 'batch_0',
+        },
+        {
+          body: [
+            {
+              errorCode: 'PROCESSING_HALTED',
+              message: 'The transaction was rolled back since another operation in the same transaction failed.',
+            },
+          ],
+          httpHeaders: {},
+          httpStatusCode: 400,
+          referenceId: 'batch_1',
+        },
+      ],
+    }
+  }
+
   it('authenticates with client_credentials grant type', async () => {
     mockAuthFetch()
 
@@ -174,7 +206,40 @@ describe('SalesforceService', () => {
     const records = [makeMinimalRecord('r1')]
 
     await expect(svc.insertStagingRecords(records)).rejects.toThrow(
-      'Composite insert failed (all records rolled back): Required field missing'
+      'Composite insert failed (all records rolled back): batch_0: Required field missing'
+    )
+  })
+
+  it('surfaces the real SF error when other subrequests are rolled back', async () => {
+    mockAuthFetch()
+    mockRequestPost.mockResolvedValue(makeRolledBackResponse())
+
+    const svc = new SalesforceService()
+    const records = [makeMinimalRecord('r1')]
+
+    const err = await svc.insertStagingRecords(records).catch((e: Error) => e)
+
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toContain('Required field missing')
+    expect((err as Error).message).toContain('PROCESSING_HALTED')
+  })
+
+  it('reports an unrecognized error shape instead of throwing on it', async () => {
+    mockAuthFetch()
+    mockRequestPost.mockResolvedValue({
+      compositeResponse: [{
+        body: { somethingUnexpected: true } as never,
+        httpHeaders: {},
+        httpStatusCode: 500,
+        referenceId: 'batch_0',
+      }],
+    })
+
+    const svc = new SalesforceService()
+    const records = [makeMinimalRecord('r1')]
+
+    await expect(svc.insertStagingRecords(records)).rejects.toThrow(
+      'batch_0: unrecognized error response: {"somethingUnexpected":true}'
     )
   })
 
