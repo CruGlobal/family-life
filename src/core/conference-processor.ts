@@ -25,11 +25,11 @@ export async function processConference(
   const lookups = buildLookups(detail)
   const regTypeNameLookup = buildRegTypeNameLookup(detail)
 
-  // Fetch registrations (paginated, filtered by lastImportDate)
+  // Fetch registrations (paginated, filtered by lastImportDate). Page size is
+  // left to the service: ERT ignores `per_page` and always returns 20 per page.
   const registrations = await services.ert.getAllRegistrations(
     conferenceId,
-    lastImportDate,
-    services.ert instanceof Object ? undefined : undefined // use default page size
+    lastImportDate
   )
 
   logger.info('Fetched registrations for conference', {

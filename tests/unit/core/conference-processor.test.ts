@@ -37,8 +37,7 @@ describe('processConference', () => {
     expect(services.ert.getConferenceDetail).not.toHaveBeenCalled()
     expect(services.ert.getAllRegistrations).toHaveBeenCalledWith(
       'conf-001',
-      '2026-01-01T00:00:00Z',
-      undefined
+      '2026-01-01T00:00:00Z'
     )
   })
 

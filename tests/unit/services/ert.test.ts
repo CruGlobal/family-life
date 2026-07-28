@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ErtService } from '@/services/ert.js'
 import { resetConfig } from '@/config/index.js'
+import { logger } from '@/utils/logging.js'
 
 describe('ErtService', () => {
   const originalFetch = global.fetch
@@ -54,25 +55,25 @@ describe('ErtService', () => {
     expect(calledUrl).toContain('filterAfter=')
   })
 
-  it('getAllRegistrations paginates through all pages', async () => {
-    const page0 = {
-      registrations: [{ id: 'r1' }],
-      meta: { totalPages: 2, currentPage: 0 },
-    }
-    const page1 = {
-      registrations: [{ id: 'r2' }],
-      meta: { totalPages: 2, currentPage: 1 },
-    }
-
-    let callCount = 0
+  // Serve a fixed list of pages, then empty pages forever (how ERT behaves).
+  function mockPages(pages: Array<Array<{ id: string; registrants?: Array<{ id: string }> }>>, meta = {}) {
+    let call = 0
     global.fetch = vi.fn().mockImplementation(() => {
-      const data = callCount === 0 ? page0 : page1
-      callCount++
+      const registrations = pages[call] ?? []
+      call++
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve(data),
+        json: () => Promise.resolve({
+          registrations,
+          meta: { totalPages: 2, currentPage: 0, ...meta },
+        }),
       })
     })
+    return () => call
+  }
+
+  it('getAllRegistrations paginates through all pages', async () => {
+    mockPages([[{ id: 'r1' }], [{ id: 'r2' }]])
 
     const svc = new ErtService()
     const result = await svc.getAllRegistrations('c-1', '2026-01-01T00:00:00Z', 1)
@@ -80,6 +81,69 @@ describe('ErtService', () => {
     expect(result).toHaveLength(2)
     expect(result[0].id).toBe('r1')
     expect(result[1].id).toBe('r2')
+  })
+
+  // ERT under-reports totalPages: it repeats a page, which pushes the real tail
+  // past the reported count. Trusting totalPages silently drops those records.
+  it('keeps paging past totalPages until a page comes back empty', async () => {
+    mockPages(
+      [
+        [{ id: 'ra', registrants: [{ id: 'g1' }] }],
+        [{ id: 'ra', registrants: [{ id: 'g1' }] }], // repeat of page 0
+        [{ id: 'rb', registrants: [{ id: 'g2' }] }],
+        [{ id: 'rc', registrants: [{ id: 'g3' }] }], // beyond totalPages: 2
+      ],
+      { totalPages: 2, totalRegistrantsFilter: 3 }
+    )
+
+    const svc = new ErtService()
+    const result = await svc.getAllRegistrations('c-1', '2026-01-01T00:00:00Z')
+
+    expect(result.flatMap(r => r.registrants!.map(g => g.id))).toEqual(['g1', 'g2', 'g3'])
+  })
+
+  it('deduplicates registrants repeated across pages', async () => {
+    mockPages(
+      [
+        [{ id: 'ra', registrants: [{ id: 'g1' }, { id: 'g2' }] }],
+        [{ id: 'ra', registrants: [{ id: 'g1' }, { id: 'g2' }] }],
+        [{ id: 'ra', registrants: [{ id: 'g2' }, { id: 'g3' }] }], // partial overlap
+      ],
+      { totalRegistrantsFilter: 3 }
+    )
+
+    const svc = new ErtService()
+    const result = await svc.getAllRegistrations('c-1', '2026-01-01T00:00:00Z')
+
+    const registrantIds = result.flatMap(r => r.registrants!.map(g => g.id))
+    expect(registrantIds).toEqual(['g1', 'g2', 'g3'])
+    expect(new Set(registrantIds).size).toBe(registrantIds.length)
+  })
+
+  it('stops at an empty page without consuming the page cap', async () => {
+    const calls = mockPages([[{ id: 'r1', registrants: [{ id: 'g1' }] }]])
+
+    const svc = new ErtService()
+    await svc.getAllRegistrations('c-1', '2026-01-01T00:00:00Z')
+
+    expect(calls()).toBe(2) // one page of data, one empty page to terminate
+  })
+
+  it('warns when the distinct count does not match totalRegistrantsFilter', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    mockPages(
+      [[{ id: 'ra', registrants: [{ id: 'g1' }] }]],
+      { totalRegistrantsFilter: 5 }
+    )
+
+    const svc = new ErtService()
+    await svc.getAllRegistrations('c-1', '2026-01-01T00:00:00Z')
+
+    expect(warn).toHaveBeenCalledWith(
+      'Registrant count does not match ERT total',
+      expect.objectContaining({ distinctRegistrants: 1, totalRegistrantsFilter: 5 })
+    )
+    warn.mockRestore()
   })
 
   it('getConferenceIds calls integrations endpoint with ministry and activity params', async () => {

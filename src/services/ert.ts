@@ -18,6 +18,13 @@ function toErtDatetime(iso: string): string {
   return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`
 }
 
+/**
+ * Safety cap on pagination. ERT serves 20 rows per page regardless of
+ * `per_page`, so this allows 10,000 registrants for a single conference — far
+ * above any real event, while still bounding a malformed response.
+ */
+const MAX_REGISTRATION_PAGES = 500
+
 export class ErtService {
   private baseUrl: string
   private apiKey: string
@@ -76,35 +83,110 @@ export class ErtService {
     )
   }
 
+  /**
+   * Fetch every registration for a conference, working around two ERT defects.
+   *
+   * 1. `per_page` is ignored — ERT always returns 20 rows per page.
+   * 2. A page can repeat its predecessor, which both duplicates rows and pushes
+   *    the real tail beyond the reported `meta.totalPages`. Trusting that count
+   *    silently drops the trailing records.
+   *
+   * So we page until ERT returns an empty page rather than to `totalPages`, and
+   * deduplicate by registrant id as we go. Termination is on an empty page, not
+   * on "no new records" — a repeated page yields nothing new while later pages
+   * still hold real data.
+   */
   async getAllRegistrations(
     conferenceId: string,
     filterAfter?: string,
     pageSize = 100
   ): Promise<ERTRegistration[]> {
-    const allRegistrations: ERTRegistration[] = []
-    let currentPage = 0
-    let totalPages = 1
+    const collected: ERTRegistration[] = []
+    const seenRegistrants = new Set<string>()
+    const seenRegistrations = new Set<string>()
+    let totalRegistrantsFilter: number | undefined
+    let page = 0
+    let duplicateRows = 0
 
-    while (currentPage < totalPages) {
+    for (; page < MAX_REGISTRATION_PAGES; page++) {
       const response = await this.getRegistrations(conferenceId, {
-        page: currentPage,
+        page,
         pageSize,
         filterAfter,
       })
 
-      allRegistrations.push(...response.registrations)
-      totalPages = response.meta.totalPages
-      currentPage++
+      if (response.registrations.length === 0) break
+
+      if (response.meta?.totalRegistrantsFilter !== undefined) {
+        totalRegistrantsFilter = response.meta.totalRegistrantsFilter
+      }
+
+      for (const registration of response.registrations) {
+        const registrants = registration.registrants || []
+
+        // Defensive: a registration with no registrants can only be deduped by
+        // its own id.
+        if (registrants.length === 0) {
+          if (seenRegistrations.has(registration.id)) {
+            duplicateRows++
+            continue
+          }
+          seenRegistrations.add(registration.id)
+          collected.push(registration)
+          continue
+        }
+
+        const fresh = registrants.filter(r => !seenRegistrants.has(r.id))
+        if (fresh.length === 0) {
+          duplicateRows++
+          continue
+        }
+        for (const r of fresh) seenRegistrants.add(r.id)
+
+        collected.push(
+          fresh.length === registrants.length
+            ? registration
+            : { ...registration, registrants: fresh }
+        )
+      }
 
       logger.debug('Fetched registration page', {
         conferenceId,
-        page: currentPage,
-        totalPages,
+        page,
         count: response.registrations.length,
+        distinctSoFar: seenRegistrants.size,
       })
     }
 
-    return allRegistrations
+    if (page >= MAX_REGISTRATION_PAGES) {
+      logger.warn('Hit registration page cap; results may be incomplete', {
+        conferenceId,
+        maxPages: MAX_REGISTRATION_PAGES,
+      })
+    }
+
+    if (duplicateRows > 0) {
+      logger.info('Discarded duplicate registration rows from ERT', {
+        conferenceId,
+        duplicateRows,
+        distinctRegistrants: seenRegistrants.size,
+      })
+    }
+
+    // The count ERT reports is the only cross-check available that we fetched
+    // everything. A mismatch means records are still being missed.
+    if (
+      totalRegistrantsFilter !== undefined &&
+      seenRegistrants.size !== totalRegistrantsFilter
+    ) {
+      logger.warn('Registrant count does not match ERT total', {
+        conferenceId,
+        distinctRegistrants: seenRegistrants.size,
+        totalRegistrantsFilter,
+      })
+    }
+
+    return collected
   }
 }
 
