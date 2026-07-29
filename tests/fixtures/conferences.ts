@@ -11,8 +11,12 @@ export function makeConferenceDetail(overrides: Partial<ERTConferenceDetail> = {
     ministry: 'ministry-fl-001',
     ministryActivity: WTR_ACTIVITY_ID,
     eventType: '0f87dff6-0115-4d86-8bc7-5e785334b3e2',
-    eventStartTime: '2026-03-15T18:00:00',
-    eventEndTime: '2026-03-17T12:00:00',
+    // ERT sends these with no zone marker; eventTimezone names the zone.
+    // Lincoln NE is Central, so 18:00 local on 15 Mar 2026 is CDT (-5).
+    eventStartTime: '2026-03-15 18:00:00',
+    eventEndTime: '2026-03-17 12:00:00',
+    eventTimezone: 'America/Chicago',
+    registrationTimezone: 'America/Chicago',
     locationName: 'Cornhusker Marriott',
     locationAddress: '333 S 13th St',
     locationCity: 'Lincoln',

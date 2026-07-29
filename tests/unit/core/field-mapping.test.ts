@@ -1,14 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   getRegistrationStatus,
   getFLRegistrationType,
   getEventTypeName,
-  toSalesforceDateTime,
+  utcTimestampToSalesforce,
+  localTimeToSalesforce,
   TAG_TO_SF_FIELD,
   CHURCH_ADDRESS_TAG,
   CHURCH_ADDRESS_FIELD_MAP,
   EVENT_TYPE_MAP,
 } from '@/core/field-mapping.js'
+import { logger } from '@/utils/logging.js'
 
 describe('getRegistrationStatus', () => {
   it('returns Canceled when completed and withdrawn', () => {
@@ -125,20 +127,71 @@ describe('EVENT_TYPE_MAP', () => {
   })
 })
 
-describe('toSalesforceDateTime', () => {
-  it('normalizes ISO without Z to .000Z', () => {
-    expect(toSalesforceDateTime('2026-05-15T19:00:00')).toBe('2026-05-15T19:00:00.000Z')
-  })
-
-  it('truncates milliseconds and replaces Z with .000Z', () => {
-    expect(toSalesforceDateTime('2026-02-13T15:28:50.785Z')).toBe('2026-02-13T15:28:50.000Z')
-  })
-
-  it('handles space separator', () => {
-    expect(toSalesforceDateTime('2026-05-15 19:00:00')).toBe('2026-05-15T19:00:00.000Z')
+describe('utcTimestampToSalesforce', () => {
+  // For ERT values that already carry a zone. Normalizes precision only —
+  // it must never shift the instant.
+  it('truncates milliseconds and keeps .000Z', () => {
+    expect(utcTimestampToSalesforce('2026-02-13T15:28:50.785Z')).toBe('2026-02-13T15:28:50.000Z')
   })
 
   it('handles full ISO with Z', () => {
-    expect(toSalesforceDateTime('2026-03-15T18:30:00Z')).toBe('2026-03-15T18:30:00.000Z')
+    expect(utcTimestampToSalesforce('2026-03-15T18:30:00Z')).toBe('2026-03-15T18:30:00.000Z')
+  })
+})
+
+describe('localTimeToSalesforce', () => {
+  // ERT sends conference times with no zone at all ("2026-09-25 19:00:00") and
+  // names the zone separately. Every WTR event is 19:00 LOCAL, so stamping .000Z
+  // onto it published each event 4-8 hours early depending on the venue.
+  it.each([
+    // [label,        local,                 zone,                  expected UTC]
+    ['EDT (-4)',      '2026-09-25 19:00:00', 'America/New_York',    '2026-09-25T23:00:00.000Z'],
+    ['EST (-5)',      '2027-02-19 19:00:00', 'America/New_York',    '2027-02-20T00:00:00.000Z'],
+    ['CDT (-5)',      '2027-04-30 19:00:00', 'America/Chicago',     '2027-05-01T00:00:00.000Z'],
+    ['PST (-8)',      '2027-03-05 19:00:00', 'America/Los_Angeles', '2027-03-06T03:00:00.000Z'],
+    ['PDT (-7)',      '2027-07-09 19:00:00', 'America/Los_Angeles', '2027-07-10T02:00:00.000Z'],
+    ['MDT (-6)',      '2026-08-14 19:00:00', 'America/Denver',      '2026-08-15T01:00:00.000Z'],
+    ['AKDT (-8)',     '2027-03-19 19:00:00', 'America/Anchorage',   '2027-03-20T03:00:00.000Z'],
+  ])('converts %s correctly', (_label, local, zone, expected) => {
+    expect(localTimeToSalesforce(local, zone)).toBe(expected)
+  })
+
+  // Same wall-clock time, same zone, opposite sides of the DST boundary — a
+  // fixed offset table would get one of these wrong.
+  it('applies the offset in force on that date, not a fixed one', () => {
+    const winter = localTimeToSalesforce('2027-01-15 19:00:00', 'America/New_York')
+    const summer = localTimeToSalesforce('2027-07-15 19:00:00', 'America/New_York')
+    expect(winter).toBe('2027-01-16T00:00:00.000Z') // EST, -5
+    expect(summer).toBe('2027-07-15T23:00:00.000Z') // EDT, -4
+  })
+
+  it('accepts a T separator as well as a space', () => {
+    expect(localTimeToSalesforce('2026-03-15T18:00:00', 'America/New_York'))
+      .toBe('2026-03-15T22:00:00.000Z')
+  })
+
+  // The spring-forward gap: 02:30 does not exist on this date in New York, so
+  // any answer is a choice. This resolves it with the post-transition offset
+  // (EDT, -4). What matters is that it is stable and never throws — WTR events
+  // are all at 19:00, so the gap is unreachable in practice.
+  it('resolves a nonexistent spring-forward time deterministically', () => {
+    const first = localTimeToSalesforce('2027-03-14 02:30:00', 'America/New_York')
+    const second = localTimeToSalesforce('2027-03-14 02:30:00', 'America/New_York')
+
+    expect(first).toBe('2027-03-14T06:30:00.000Z')
+    expect(second).toBe(first)
+  })
+
+  it('falls back to Eastern with a warning when the zone is missing', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+    expect(localTimeToSalesforce('2026-09-25 19:00:00', undefined))
+      .toBe('2026-09-25T23:00:00.000Z')
+    expect(warn).toHaveBeenCalledWith(
+      'Conference has no timezone; assuming Eastern',
+      expect.objectContaining({ value: '2026-09-25 19:00:00' })
+    )
+
+    warn.mockRestore()
   })
 })
