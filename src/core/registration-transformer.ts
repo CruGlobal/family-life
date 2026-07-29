@@ -6,7 +6,8 @@ import {
   getRegistrationStatus,
   getFLRegistrationType,
   getEventTypeName,
-  toSalesforceDateTime,
+  utcTimestampToSalesforce,
+  localTimeToSalesforce,
   SF_FIELD_MAX_LENGTHS,
 } from './field-mapping.js'
 import { logger } from '../utils/logging.js'
@@ -116,15 +117,23 @@ export function transformRegistrant(
   record.Date_Cancelled__c = registrant.withdrawnTimestamp || null
   record.Date_Check_In__c = registrant.checkedInTimestamp || null
   record.ERT_Last_Updated__c = registration.lastUpdatedTimestamp || null
-  record.Involvement_Registration_Created_Date__c = registration.lastUpdatedTimestamp
-    ? toSalesforceDateTime(registration.lastUpdatedTimestamp)
+  // createdTimestamp, not lastUpdatedTimestamp — a "created" date must not move
+  // every time the registration is edited. Already UTC, so no conversion.
+  record.Involvement_Registration_Created_Date__c = registration.createdTimestamp
+    ? utcTimestampToSalesforce(registration.createdTimestamp)
     : null
 
   // Event fields (conditional: not empty)
   if (conf.name) record.Event_Name__c = conf.name
   if (conf.locationName) record.Event_Location__c = conf.locationName
-  if (conf.eventStartTime) record.Event_Start_Date__c = toSalesforceDateTime(conf.eventStartTime)
-  if (conf.eventEndTime) record.Event_End_Date__c = toSalesforceDateTime(conf.eventEndTime)
+  // Conference times are wall-clock local with no zone; ERT names the zone
+  // separately. Appending .000Z published every event 4-8 hours early.
+  if (conf.eventStartTime) {
+    record.Event_Start_Date__c = localTimeToSalesforce(conf.eventStartTime, conf.eventTimezone ?? undefined)
+  }
+  if (conf.eventEndTime) {
+    record.Event_End_Date__c = localTimeToSalesforce(conf.eventEndTime, conf.eventTimezone ?? undefined)
+  }
   if (conf.contactPersonName) record.Event_Sponsor_Staff_Name__c = conf.contactPersonName
   if (conf.contactPersonEmail) record.Event_Sponsor_Staff_Email__c = conf.contactPersonEmail
   record.Event_Type__c = getEventTypeName(conf.eventType || '')

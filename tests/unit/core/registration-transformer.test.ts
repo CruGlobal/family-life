@@ -185,8 +185,10 @@ describe('transformRegistrant', () => {
       expect(record.Event_Id__c).toBe('WTR26LNK1')
       expect(record.Event_Name__c).toBe('WTR26 Lincoln')
       expect(record.Event_Location__c).toBe('Cornhusker Marriott')
-      expect(record.Event_Start_Date__c).toBe('2026-03-15T18:00:00.000Z')
-      expect(record.Event_End_Date__c).toBe('2026-03-17T12:00:00.000Z')
+      // 18:00 local in America/Chicago (CDT, -5) is 23:00 UTC. Asserting the
+      // shift, not just the format — 18:00:00.000Z would be the old bug.
+      expect(record.Event_Start_Date__c).toBe('2026-03-15T23:00:00.000Z')
+      expect(record.Event_End_Date__c).toBe('2026-03-17T17:00:00.000Z')
       expect(record.Event_Sponsor_Staff_Name__c).toBe('John Doe')
       expect(record.Event_Sponsor_Staff_Email__c).toBe('john.doe@cru.org')
       expect(record.Event_Type__c).toBe('Spring Break')
@@ -213,6 +215,7 @@ describe('transformRegistrant', () => {
   describe('date fields', () => {
     it('maps registration dates', () => {
       const reg = makeRegistration({
+        createdTimestamp: '2026-02-01T09:50:00Z',
         completedTimestamp: '2026-02-01T10:00:00Z',
         lastUpdatedTimestamp: '2026-02-05T12:00:00Z',
       })
@@ -226,7 +229,33 @@ describe('transformRegistrant', () => {
       expect(record.Date_Cancelled__c).toBeNull()
       expect(record.Date_Check_In__c).toBe('2026-03-15T18:30:00Z')
       expect(record.ERT_Last_Updated__c).toBe('2026-02-05T12:00:00Z')
-      expect(record.Involvement_Registration_Created_Date__c).toBe('2026-02-05T12:00:00.000Z')
+
+      // Created date tracks createdTimestamp, so it must NOT move when the
+      // registration is edited later — it previously mirrored lastUpdated.
+      expect(record.Involvement_Registration_Created_Date__c).toBe('2026-02-01T09:50:00.000Z')
+      expect(record.Involvement_Registration_Created_Date__c)
+        .not.toBe(record.ERT_Last_Updated__c)
+    })
+
+    it('leaves the created date null when ERT has no createdTimestamp', () => {
+      const reg = makeRegistration({ createdTimestamp: null })
+      const record = transformRegistrant(reg, makeRegistrant(), makeContext())!
+
+      expect(record.Involvement_Registration_Created_Date__c).toBeNull()
+    })
+
+    it('shifts event times by the conference zone, not a fixed offset', () => {
+      const pacific = makeContext({
+        conference: makeConferenceDetail({
+          eventStartTime: '2027-03-05 19:00:00', // PST, -8
+          eventEndTime: '2027-07-09 19:00:00',   // PDT, -7
+          eventTimezone: 'America/Los_Angeles',
+        }),
+      })
+      const record = transformRegistrant(makeRegistration(), makeRegistrant(), pacific)!
+
+      expect(record.Event_Start_Date__c).toBe('2027-03-06T03:00:00.000Z')
+      expect(record.Event_End_Date__c).toBe('2027-07-10T02:00:00.000Z')
     })
   })
 

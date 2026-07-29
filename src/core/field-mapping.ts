@@ -1,3 +1,5 @@
+import { logger } from '../utils/logging.js'
+
 // Simple 1:1 tag mappings: ERT blockTagType name → SF field name
 export const TAG_TO_SF_FIELD: Record<string, string> = {
   'fl_registration_type': 'Involvement_Registration_Type__c',
@@ -16,7 +18,6 @@ export const TAG_TO_SF_FIELD: Record<string, string> = {
   'fl_title': 'Title__c',
 }
 
-// Structured tag that decomposes into multiple SF fields
 /**
  * Maximum length of every string field on Staging_Involvement__c that this sync
  * writes. An over-length value fails the whole allOrNone insert, blocking every
@@ -85,6 +86,7 @@ export const SF_FIELD_MAX_LENGTHS: Readonly<Record<string, number>> = {
   Waiver__c: 50,
 }
 
+// Structured tag that decomposes into multiple SF fields
 export const CHURCH_ADDRESS_TAG = 'fl_church_addresss' // note: triple 's' in ERT
 
 export const CHURCH_ADDRESS_FIELD_MAP: Record<string, string> = {
@@ -129,12 +131,73 @@ export function getEventTypeName(eventTypeId: string): string {
   return EVENT_TYPE_MAP[eventTypeId] ?? eventTypeId
 }
 
+/** Zone assumed when ERT gives a conference no timezone of its own. */
+const FALLBACK_TIMEZONE = 'America/New_York'
+
 /**
- * Normalize a datetime string to Salesforce ISO format: YYYY-MM-DDTHH:mm:ss.000Z
- * Matches Celigo's extractDateFormat "YYYY-MM-DDTHH:mm:ss" behavior:
- * parses up to seconds precision, outputs with .000Z.
+ * Normalize an ERT timestamp that ALREADY carries a zone (e.g.
+ * "2026-02-13T15:28:50.785Z") to Salesforce's format. Precision only — this
+ * must never shift the instant.
+ *
+ * For conference times, which arrive with no zone at all, use
+ * localTimeToSalesforce instead.
  */
-export function toSalesforceDateTime(value: string): string {
-  const normalized = value.replace(' ', 'T')
-  return normalized.substring(0, 19) + '.000Z'
+export function utcTimestampToSalesforce(value: string): string {
+  return value.replace(' ', 'T').substring(0, 19) + '.000Z'
+}
+
+/**
+ * Convert a zone-less ERT wall-clock time ("2026-09-25 19:00:00") to UTC,
+ * interpreting it in `timeZone`.
+ *
+ * ERT sends conference times with no zone marker and names the zone separately
+ * in `eventTimezone`. Every WTR conference starts at 19:00 *local*, so simply
+ * appending ".000Z" published each event 4-8 hours early depending on the venue.
+ *
+ * The offset is resolved for the specific date, so DST is handled: 5 March is
+ * PST while 9 July is PDT in the same zone.
+ */
+export function localTimeToSalesforce(value: string, timeZone: string | undefined): string {
+  let zone = timeZone
+  if (!zone) {
+    logger.warn('Conference has no timezone; assuming Eastern', { value })
+    zone = FALLBACK_TIMEZONE
+  }
+
+  const wallClock = value.replace(' ', 'T').substring(0, 19)
+
+  // Read the wall-clock as if it were UTC, ask what that instant looks like in
+  // the target zone, and the difference is the offset to remove. Applied twice
+  // so the offset is measured near the true instant rather than up to a day off,
+  // which also settles DST-boundary inputs deterministically.
+  const asIfUtc = new Date(`${wallClock}Z`)
+  let result = new Date(asIfUtc.getTime() + offsetMs(asIfUtc, zone))
+  result = new Date(asIfUtc.getTime() + offsetMs(result, zone))
+
+  return result.toISOString().replace(/\.\d{3}Z$/, '.000Z')
+}
+
+/** How far `zone` is behind UTC at `instant`, in milliseconds. */
+function offsetMs(instant: Date, zone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant)
+
+  const p: Record<string, string> = {}
+  for (const part of parts) {
+    if (part.type !== 'literal') p[part.type] = part.value
+  }
+
+  // Intl can render midnight as hour "24".
+  const hour = p.hour === '24' ? '00' : p.hour
+  const inZone = Date.parse(`${p.year}-${p.month}-${p.day}T${hour}:${p.minute}:${p.second}Z`)
+
+  return instant.getTime() - inZone
 }
