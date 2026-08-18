@@ -14,9 +14,9 @@ export interface ERTConferenceDetail {
   ministryActivity: string | null
   eventType: string | null
   /** Wall-clock local time with NO zone marker ("2026-09-25 19:00:00"). */
-  eventStartTime: string
+  eventStartTime: string | null
   /** Wall-clock local time with NO zone marker ("2026-09-27 12:00:00"). */
-  eventEndTime: string
+  eventEndTime: string | null
   /** IANA zone the event times are expressed in, e.g. "America/Chicago". */
   eventTimezone: string | null
   /** IANA zone the registration window times are expressed in. */

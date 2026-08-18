@@ -28,8 +28,10 @@ describe('runRegistrationsToSF', () => {
     ministry: '9f63db46-6ca9-43b0-868a-23326b3c4d91',
     ministryActivity: '9c6eae3f-8928-4703-a2a4-e5bf995dfd19',
     eventType: '0f87dff6-0115-4d86-8bc7-5e785334b3e2',
-    eventStartTime: '2026-03-15T18:00:00',
-    eventEndTime: '2026-03-17T12:00:00',
+    // Far future: the orchestrator runs with post-event suppression on, and a
+    // past-dated conference would suppress every record in these pipeline tests.
+    eventStartTime: '2099-03-15T18:00:00',
+    eventEndTime: '2099-03-17T12:00:00',
     locationName: 'Marriott',
     contactPersonName: 'John',
     contactPersonEmail: 'j@cru.org',
@@ -111,6 +113,25 @@ describe('runRegistrationsToSF', () => {
     expect(result.insertResult.successCount).toBe(1)
     expect(services.ssm.getLastImportDate).toHaveBeenCalled()
     expect(services.ssm.updateLastImportDate).toHaveBeenCalledWith(result.runStartTime)
+  })
+
+  // Pins that the orchestrator passes suppressPostEvent: true — the rule itself
+  // is tested in conference-processor.test.ts, but nothing else would fail if
+  // the option were dropped from the processConference call.
+  it('runs with post-event suppression enabled', async () => {
+    const endedDetail = {
+      ...defaultDetail,
+      eventStartTime: '2026-03-15T18:00:00',
+      eventEndTime: '2026-03-17T12:00:00',
+    }
+    const services = makeServices({ conferenceDetails: { 'c-1': endedDetail } })
+
+    const result = await runRegistrationsToSF(services)
+
+    // Default registrant is completed, not withdrawn, not checked in →
+    // Registered → suppressed on an ended event.
+    expect(result.totalRecords).toBe(0)
+    expect(services.salesforce.insertStagingRecords).toHaveBeenCalledWith([])
   })
 
   it('aborts entire run when any conference gather fails', async () => {

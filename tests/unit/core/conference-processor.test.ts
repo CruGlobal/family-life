@@ -131,4 +131,111 @@ describe('processConference', () => {
     expect(result.records).toHaveLength(0)
     expect(services.salesforce.insertStagingRecords).not.toHaveBeenCalled()
   })
+
+  // Post-event suppression. The fixture conference ends 2026-03-17, which is in
+  // the past; "not ended" cases override eventEndTime to a far-future date.
+  describe('post-event suppression', () => {
+    // The Oehler case: a waiver bump on one spouse re-sends the whole couple.
+    // The withdrawn spouse must go through; the other's stale Registered must not.
+    it('drops non-canceled registrants after the event, keeps Canceled', async () => {
+      const registrations = [
+        makeRegistration({
+          registrants: [
+            makeRegistrant({ id: 'r1', firstName: 'Amy', lastName: 'Oehler' }),
+            makeRegistrant({
+              id: 'r2', firstName: 'Brad', lastName: 'Oehler',
+              withdrawn: true, withdrawnTimestamp: '2026-08-13T15:12:54.592Z',
+            }),
+          ],
+        }),
+      ]
+      const services = mockServices({ registrations })
+
+      const result = await processConference(
+        makeConferenceDetail(),
+        '2026-01-01T00:00:00Z',
+        services,
+        { suppressPostEvent: true }
+      )
+
+      expect(result.records).toHaveLength(1)
+      expect(result.records[0].Involvement_Status__c).toBe('Canceled')
+      expect(result.records[0].First_Name__c).toBe('Brad')
+      expect(result.registrantsSuppressedPostEvent).toBe(1)
+      expect(result.registrantsProcessed).toBe(1)
+      expect(result.registrantsSkipped).toBe(0)
+    })
+
+    it('drops Attended records after the event too', async () => {
+      const registrations = [
+        makeRegistration({
+          registrants: [
+            makeRegistrant({ id: 'r1', checkedInTimestamp: '2026-03-15T19:30:00Z' }),
+          ],
+        }),
+      ]
+      const services = mockServices({ registrations })
+
+      const result = await processConference(
+        makeConferenceDetail(),
+        '2026-01-01T00:00:00Z',
+        services,
+        { suppressPostEvent: true }
+      )
+
+      expect(result.records).toHaveLength(0)
+      expect(result.registrantsSuppressedPostEvent).toBe(1)
+    })
+
+    it('does not suppress before the event has ended', async () => {
+      const registrations = [
+        makeRegistration({
+          registrants: [
+            makeRegistrant({ id: 'r1' }),
+            makeRegistrant({ id: 'r2', withdrawn: true }),
+          ],
+        }),
+      ]
+      const services = mockServices({ registrations })
+
+      const result = await processConference(
+        makeConferenceDetail({ eventEndTime: '2099-01-01 12:00:00' }),
+        '2026-01-01T00:00:00Z',
+        services,
+        { suppressPostEvent: true }
+      )
+
+      expect(result.records).toHaveLength(2)
+      expect(result.registrantsSuppressedPostEvent).toBe(0)
+    })
+
+    it('does not suppress when the option is off, even post-event', async () => {
+      const services = mockServices()
+
+      const result = await processConference(
+        makeConferenceDetail(),
+        '2026-01-01T00:00:00Z',
+        services,
+        { suppressPostEvent: false }
+      )
+
+      expect(result.records).toHaveLength(1)
+      expect(result.registrantsSuppressedPostEvent).toBe(0)
+    })
+
+    // Fail open: a conference with no end time must behave exactly as today.
+    it('fails open when the conference has no event end time', async () => {
+      const services = mockServices()
+
+      const result = await processConference(
+        makeConferenceDetail({ eventEndTime: null }),
+        '2026-01-01T00:00:00Z',
+        services,
+        { suppressPostEvent: true }
+      )
+
+      expect(result.records).toHaveLength(1)
+      expect(result.registrantsSuppressedPostEvent).toBe(0)
+    })
+  })
 })
