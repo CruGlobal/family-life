@@ -47,6 +47,7 @@ Services are created via `createServices()` which returns a `Services` type used
 - **Conference isolation**: `Promise.allSettled` — one conference failing doesn't affect others.
 - **Registration filtering**: Skip blank name (checks answers before giving up), skip incomplete (`!registration.completed`).
 - **Status calculation**: completed+withdrawn=Canceled, completed+checkedIn=Attended, completed=Registered, else Incomplete.
+- **Post-event suppression**: once a conference's event end has passed (local zone, DST-aware — `hasEventEnded` in `field-mapping.ts`), only `Canceled` records are sent; everything else is dropped and counted as `registrantsSuppressedPostEvent`. FamilyLife request (Aug 2026): post-event, SF only needs withdrawals — any other resend carries a stale status that clobbers statuses they set after event close. Fails open: a missing or unparseable end time sends the record. `scripts/reconcile.ts` disables suppression (it must still find records lost pre-event) but holds post-event non-Canceled missing records for manual review instead of inserting them.
 - **FL Registration Type**: Prefer `fl_registration_type` tag answer, fall back to parsing registrant type name (Military/Pastor/Attendee).
 - **Church address tag**: Note triple 's' in `fl_church_addresss` — this is the actual ERT tag name, not a typo.
 - **Field lengths**: All string fields are truncated to their real SF column length by `enforceFieldLengths` in `registration-transformer.ts`, driven by `SF_FIELD_MAX_LENGTHS` in `field-mapping.ts` (generated from the production describe endpoint). An over-length value fails the whole `allOrNone` insert, blocking every record in the run. Regenerate the map after SF schema changes.
@@ -82,6 +83,10 @@ Rollbar enabled only in `staging`/`production` environments.
 
 ## Scripts
 
+- `scripts/reconcile.ts` — Compare ERT against the SF staging object and report (or with `--apply`, insert) registrations that never arrived. Dry run by default; post-event non-Canceled records are held for manual review, never auto-inserted. `scripts/` is outside `tsconfig` — typecheck it explicitly with `npx tsc --noEmit ... scripts/reconcile.ts`.
+  ```bash
+  npx tsx scripts/reconcile.ts [--since <ISO-8601>] [--apply]
+  ```
 - `scripts/run-from-date.ts` — Run the sync locally with a custom `lastImportDate` cursor (requires assumed AWS role for env vars). SSM update is stubbed.
   ```bash
   npx tsx scripts/run-from-date.ts <ISO-8601-date>

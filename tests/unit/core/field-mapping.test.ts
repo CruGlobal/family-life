@@ -5,6 +5,7 @@ import {
   getEventTypeName,
   utcTimestampToSalesforce,
   localTimeToSalesforce,
+  hasEventEnded,
   TAG_TO_SF_FIELD,
   CHURCH_ADDRESS_TAG,
   CHURCH_ADDRESS_FIELD_MAP,
@@ -191,6 +192,49 @@ describe('localTimeToSalesforce', () => {
       'Conference has no timezone; assuming Eastern',
       expect.objectContaining({ value: '2026-09-25 19:00:00' })
     )
+
+    warn.mockRestore()
+  })
+})
+
+describe('hasEventEnded', () => {
+  // "2026-05-03 12:00:00" in America/Chicago (CDT, -5) is 17:00:00Z — the
+  // Austin event end. The boundary must be evaluated in the event's own zone.
+  it('compares against the end time interpreted in the event zone', () => {
+    const end = '2026-05-03 12:00:00'
+    const zone = 'America/Chicago'
+
+    expect(hasEventEnded(end, zone, new Date('2026-05-03T16:59:00Z'))).toBe(false)
+    expect(hasEventEnded(end, zone, new Date('2026-05-03T17:01:00Z'))).toBe(true)
+  })
+
+  it('is false well before and true well after the event', () => {
+    const end = '2026-03-17 12:00:00'
+    const zone = 'America/Chicago'
+
+    expect(hasEventEnded(end, zone, new Date('2026-01-01T00:00:00Z'))).toBe(false)
+    expect(hasEventEnded(end, zone, new Date('2026-09-01T00:00:00Z'))).toBe(true)
+  })
+
+  // Fail open: bad data must degrade to "send the record" (today's behavior),
+  // never to silently dropping live traffic.
+  it('fails open when the end time is missing', () => {
+    expect(hasEventEnded(null, 'America/Chicago', new Date('2099-01-01T00:00:00Z'))).toBe(false)
+    expect(hasEventEnded(undefined, 'America/Chicago', new Date('2099-01-01T00:00:00Z'))).toBe(false)
+    expect(hasEventEnded('', 'America/Chicago', new Date('2099-01-01T00:00:00Z'))).toBe(false)
+  })
+
+  it('fails open when the end time is unparseable', () => {
+    expect(hasEventEnded('not a date', 'America/Chicago', new Date('2099-01-01T00:00:00Z'))).toBe(false)
+  })
+
+  it('falls back to Eastern when the zone is missing', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+    // 12:00 Eastern (EDT, -4) is 16:00Z. A now between 16:00Z and 17:00Z
+    // distinguishes the Eastern fallback from a Chicago reading.
+    expect(hasEventEnded('2026-05-03 12:00:00', null, new Date('2026-05-03T16:30:00Z'))).toBe(true)
+    expect(warn).toHaveBeenCalled()
 
     warn.mockRestore()
   })

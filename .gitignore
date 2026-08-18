@@ -132,3 +132,8 @@ dist
 
 # IDE
 .idea/
+
+.DS_Store
+
+# Local credential scratch file — never commit
+sf.txt

@@ -67,7 +67,7 @@ export async function runRegistrationsToSF(services: Services): Promise<Registra
   // 4. Gather records from all conferences (parallel, but any failure aborts the run)
   const gatherResults = await Promise.allSettled(
     wtrDetails.map(detail =>
-      processConference(detail, lastImportDate, services)
+      processConference(detail, lastImportDate, services, { suppressPostEvent: true })
     )
   )
 
@@ -124,6 +124,9 @@ export async function runRegistrationsToSF(services: Services): Promise<Registra
     conferencesProcessed: syncResult.conferencesProcessed,
     totalRecords: syncResult.totalRecords,
     insertSuccess: insertResult.successCount,
+    recordsSuppressedPostEvent: conferenceResults.reduce(
+      (n, r) => n + r.registrantsSuppressedPostEvent, 0
+    ),
   })
 
   return syncResult
