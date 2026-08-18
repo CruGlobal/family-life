@@ -158,6 +158,16 @@ export function utcTimestampToSalesforce(value: string): string {
  * PST while 9 July is PDT in the same zone.
  */
 export function localTimeToSalesforce(value: string, timeZone: string | undefined): string {
+  return localTimeToUtc(value, timeZone).toISOString().replace(/\.\d{3}Z$/, '.000Z')
+}
+
+/**
+ * The conversion behind localTimeToSalesforce, returning the instant itself.
+ *
+ * Unparseable input comes back as an Invalid Date rather than throwing —
+ * callers decide whether that is fatal (formatting) or ignorable (comparison).
+ */
+export function localTimeToUtc(value: string, timeZone: string | undefined): Date {
   let zone = timeZone
   if (!zone) {
     logger.warn('Conference has no timezone; assuming Eastern', { value })
@@ -171,10 +181,30 @@ export function localTimeToSalesforce(value: string, timeZone: string | undefine
   // so the offset is measured near the true instant rather than up to a day off,
   // which also settles DST-boundary inputs deterministically.
   const asIfUtc = new Date(`${wallClock}Z`)
+  if (Number.isNaN(asIfUtc.getTime())) return asIfUtc // Intl would throw on it
+
   let result = new Date(asIfUtc.getTime() + offsetMs(asIfUtc, zone))
   result = new Date(asIfUtc.getTime() + offsetMs(result, zone))
 
-  return result.toISOString().replace(/\.\d{3}Z$/, '.000Z')
+  return result
+}
+
+/**
+ * Whether a conference's event end has passed. Drives post-event suppression:
+ * after the event, Salesforce only wants withdrawals (FamilyLife, Aug 2026).
+ *
+ * Fails open — a missing or unparseable end time reads as "not ended" so the
+ * record is sent. Suppressing on bad data would silently drop live traffic,
+ * which is the worse failure. (NaN < anything is false, so the garbage case
+ * needs no explicit branch.)
+ */
+export function hasEventEnded(
+  eventEndTime: string | null | undefined,
+  timeZone: string | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!eventEndTime) return false
+  return localTimeToUtc(eventEndTime, timeZone ?? undefined).getTime() < now.getTime()
 }
 
 /** How far `zone` is behind UTC at `instant`, in milliseconds. */
