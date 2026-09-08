@@ -225,7 +225,10 @@ describe('transformRegistrant', () => {
       })
       const record = transformRegistrant(reg, registrant, makeContext())!
 
-      expect(record.Date_Registered__c).toBe('2026-02-01T10:00:00Z')
+      // Date_Registered__c / Date_Cancelled__c are SF DATE columns — a calendar
+      // date in FamilyLife's zone. Date_Check_In__c and ERT_Last_Updated__c are
+      // DATETIME, so those keep the full UTC instant.
+      expect(record.Date_Registered__c).toBe('2026-02-01')
       expect(record.Date_Cancelled__c).toBeNull()
       expect(record.Date_Check_In__c).toBe('2026-03-15T18:30:00Z')
       expect(record.ERT_Last_Updated__c).toBe('2026-02-05T12:00:00Z')
@@ -235,6 +238,33 @@ describe('transformRegistrant', () => {
       expect(record.Involvement_Registration_Created_Date__c).toBe('2026-02-01T09:50:00.000Z')
       expect(record.Involvement_Registration_Created_Date__c)
         .not.toBe(record.ERT_Last_Updated__c)
+    })
+
+    // Regression: Spencer Anthony / Napa. ERT showed the registration completed
+    // 9/4 21:33 Eastern; Salesforce filed it as 9/5 because the UTC instant was
+    // handed straight to a DATE column.
+    it('files an evening registration under the Eastern date, not the UTC one', () => {
+      const reg = makeRegistration({ completedTimestamp: '2026-09-05T01:33:00.000Z' })
+      const record = transformRegistrant(reg, makeRegistrant(), makeContext())!
+
+      expect(record.Date_Registered__c).toBe('2026-09-04')
+    })
+
+    it('files an evening cancellation under the Eastern date, not the UTC one', () => {
+      const registrant = makeRegistrant({
+        withdrawn: true,
+        withdrawnTimestamp: '2026-09-05T02:15:00.000Z',
+      })
+      const record = transformRegistrant(makeRegistration(), registrant, makeContext())!
+
+      expect(record.Date_Cancelled__c).toBe('2026-09-04')
+    })
+
+    it('leaves the registered date null when ERT has no completedTimestamp', () => {
+      const reg = makeRegistration({ completedTimestamp: null })
+      const record = transformRegistrant(reg, makeRegistrant(), makeContext())!
+
+      expect(record.Date_Registered__c).toBeNull()
     })
 
     it('leaves the created date null when ERT has no createdTimestamp', () => {

@@ -16,7 +16,7 @@ npm run build                                     # Bundle to dist/handler.js vi
 
 ## What This Does
 
-Syncs WTR (Weekend to Remember) event registrations from ERT (Event Registration Tool) to Salesforce `Staging_Involvement_Object__c`. Runs every 15 minutes via EventBridge.
+Syncs WTR (Weekend to Remember) event registrations from ERT (Event Registration Tool) to Salesforce `Staging_Involvement__c`. Runs every 15 minutes via EventBridge.
 
 ## Architecture
 
