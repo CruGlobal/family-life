@@ -50,6 +50,16 @@ Services are created via `createServices()` which returns a `Services` type used
 - **Post-event suppression**: once a conference's event end has passed (local zone, DST-aware — `hasEventEnded` in `field-mapping.ts`), only `Canceled` records are sent; everything else is dropped and counted as `registrantsSuppressedPostEvent`. FamilyLife request (Aug 2026): post-event, SF only needs withdrawals — any other resend carries a stale status that clobbers statuses they set after event close. Fails open: a missing or unparseable end time sends the record. `scripts/reconcile.ts` disables suppression (it must still find records lost pre-event) but holds post-event non-Canceled missing records for manual review instead of inserting them.
 - **FL Registration Type**: Prefer `fl_registration_type` tag answer, fall back to parsing registrant type name (Military/Pastor/Attendee).
 - **Church address tag**: Note triple 's' in `fl_church_addresss` — this is the actual ERT tag name, not a typo.
+- **DATE vs DATETIME columns**: ERT sends every registration timestamp as true UTC, but the SF fields they land in are not all the same type, and a Salesforce DATE column carries no timezone — it keeps whatever calendar date it is handed. Handing one a UTC instant files the *GMT* date, so anything after 20:00 Eastern lands a day late. Which helper to use is decided by the SF column type, not by the ERT value:
+
+  | SF field | SF type | Helper |
+  |---|---|---|
+  | `Date_Registered__c`, `Date_Cancelled__c` | **DATE** | `utcTimestampToSalesforceDate` (Eastern calendar date) |
+  | `Date_Check_In__c`, `ERT_Last_Updated__c`, `Involvement_Registration_Created_Date__c` | DATETIME | `utcTimestampToSalesforce` (precision only) |
+  | `Event_Start_Date__c`, `Event_End_Date__c` | DATETIME | `localTimeToSalesforce` (zone-aware; conference times are zone-less wall clock) |
+
+  Re-verify the type before adding a date field — `.../sobjects/Staging_Involvement__c/describe`. Reported by FamilyLife (Mona Horton) Sep 2026; 400 of 2,000 sampled rows were a day late. Fixed in PR #22. Historical records were left as-is.
+- **Downstream `Registration__c` is FamilyLife's, not ours**: `Check_in_Date__c` and `ERT_Updated__c` there are DATE columns fed from our DATETIME staging fields. That reduction happens in Salesforce and uses GMT, so it has the same off-by-a-day symptom. We send those correctly; a fix has to come from the FamilyLife SF side.
 - **Field lengths**: All string fields are truncated to their real SF column length by `enforceFieldLengths` in `registration-transformer.ts`, driven by `SF_FIELD_MAX_LENGTHS` in `field-mapping.ts` (generated from the production describe endpoint). An over-length value fails the whole `allOrNone` insert, blocking every record in the run. Regenerate the map after SF schema changes.
 - **Phone answers**: Sanitized to digits and phone punctuation. A value still over 15 chars, or with no digits, is dropped and logged rather than truncated — a clipped phone number is a wrong one.
 
@@ -92,6 +102,35 @@ Rollbar enabled only in `staging`/`production` environments.
   npx tsx scripts/run-from-date.ts <ISO-8601-date>
   # Example: npx tsx scripts/run-from-date.ts 2026-03-11T20:00:00Z
   ```
+
+## Environments
+
+**Objects:** `Staging_Involvement__c` is what this Lambda writes. (`Staging_Involvement_Object__c` does not exist — that name 404s on the describe endpoint.) FamilyLife's downstream object is `Registration__c`.
+
+**Stage has been broken since 2026-04-28.** Verified 2026-09-08. The Lambda runs on schedule (`lambda-trigger-family-life-stage`, `cron(0 13-23 ? * MON-FRI *)`, ENABLED) and fails every time at `getConferenceIds`:
+
+```
+ERT API error 401 for /integrations/conferences: Invalid authorization code: ...5e54
+```
+
+`/ecs/family-life/stage/ERT_API_KEY` has not changed since 2026-02-24, so ERT invalidated the key on their side. Needs a replacement from the ERT team. Not IP allowlisting — a local run and the Lambda get the identical error with the identical key fingerprint. Stage Salesforce (`familylife--uat`) creds also fail locally with `invalid_client_id`; untested inside the Lambda because the run dies at ERT first. Expect a second failure there after the key is replaced.
+
+Because the cursor is only written after a successful insert, `/parameters/family-life/stage/ERTSyncLastImportDate` is frozen at `2026-04-28T15:00:07.484Z`. **Consequence: the `On Staging` label deploys but verifies nothing.** PRs #20, #21 and #22 were all labeled and deployed to stage without ever executing there.
+
+**Reading stage logs.** The `family-life-stage` SSO role has no CloudWatch permissions at all (`GetMetricStatistics`, `DescribeLogGroups`, `DescribeLogStreams`, `FilterLogEvents` all denied). Use the invoke log tail instead:
+
+```bash
+aws lambda invoke --function-name family-life-stage-registrationsToSF \
+  --log-type Tail --payload '{"source":"aws.events","detail-type":"Scheduled Event","detail":{}}' \
+  --cli-binary-format raw-in-base64-out /tmp/out.json \
+  --query 'LogResult' --output text | base64 -d
+```
+
+A thrown handler error surfaces in the response as `Runtime.ExitError: Runtime exited without providing a reason` — that is the Datadog wrapper, not an init crash. The real error is only in the log tail.
+
+**Verifying a transform change without stage.** `processConference` fetches from ERT and *returns* records; the orchestrator is what inserts. So the real pipeline can be run against **production** ERT read-only, writing nothing to Salesforce. Build a `Services` object containing only `ert` (`{ ert } as unknown as Services`), call `processConference` per conference, and correlate each record back to its source registration via ``record.Involvement_External_Id__c === `ERTREG-${registration.id}` ``. Correlate on that, not on `Involvement_Registration_Created_Date__c` — created and completed can straddle midnight and produce false failures. This verified PR #22 across 5,211 records / 86 conferences.
+
+Credentials from `cru app secrets read -e production --keys ...` into a file, then `set -a; . file; set +a`. Do not `eval` with `sed 's/^/export /'` if values could contain shell metacharacters. Delete the file afterward.
 
 ## Assumed Roles
 
