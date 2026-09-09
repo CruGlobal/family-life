@@ -4,6 +4,7 @@ import {
   getFLRegistrationType,
   getEventTypeName,
   utcTimestampToSalesforce,
+  utcTimestampToSalesforceDate,
   localTimeToSalesforce,
   hasEventEnded,
   TAG_TO_SF_FIELD,
@@ -137,6 +138,51 @@ describe('utcTimestampToSalesforce', () => {
 
   it('handles full ISO with Z', () => {
     expect(utcTimestampToSalesforce('2026-03-15T18:30:00Z')).toBe('2026-03-15T18:30:00.000Z')
+  })
+})
+
+describe('utcTimestampToSalesforceDate', () => {
+  // Date_Registered__c and Date_Cancelled__c are Salesforce DATE columns, which
+  // carry no zone — Salesforce keeps whatever calendar date it is handed. Given
+  // a full UTC instant it took the GMT date, so anything registered after 20:00
+  // Eastern was filed a day late. (FamilyLife/Mona Horton, Sep 2026.)
+  it.each([
+    // [label,                   utc instant,                  expected FL date]
+    ['21:33 EDT, rolls in UTC',  '2026-09-05T01:33:00.000Z',   '2026-09-04'],
+    ['midday, same day in both', '2026-09-05T13:33:00.000Z',   '2026-09-05'],
+    ['23:30 EST, rolls in UTC',  '2026-01-05T04:30:00.000Z',   '2026-01-04'],
+    ['00:30 EST, new day',       '2026-01-05T05:30:00.000Z',   '2026-01-05'],
+    ['19:59 EDT, before roll',   '2026-09-04T23:59:00.000Z',   '2026-09-04'],
+    ['20:00 EDT, at the roll',   '2026-09-05T00:00:00.000Z',   '2026-09-04'],
+  ])('takes the Eastern calendar date: %s', (_label, utc, expected) => {
+    expect(utcTimestampToSalesforceDate(utc)).toBe(expected)
+  })
+
+  it('accepts a space separator as well as a T', () => {
+    expect(utcTimestampToSalesforceDate('2026-09-05 01:33:00')).toBe('2026-09-04')
+  })
+
+  // An unparseable value must not become a bogus date. Salesforce rejects a
+  // malformed DATE and the insert is allOrNone, so one bad value would block
+  // every record in the run — null is the safe degradation.
+  // V8's fallback date parser is lenient enough to turn junk into a real date
+  // ("not a timestamp" once yielded 1999-12-31), which would file a record under
+  // a silently wrong day. The shape has to be validated, not just handed to Date.
+  it.each([
+    ['free text', 'not a timestamp'],
+    ['empty string', ''],
+    ['date only', '2026-09-05'],
+    ['out-of-range parts', '2026-13-45T00:00:00Z'],
+  ])('returns null and warns on %s', (_label, value) => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+    expect(utcTimestampToSalesforceDate(value)).toBeNull()
+    expect(warn).toHaveBeenCalledWith(
+      'Unparseable timestamp for a Salesforce date field; sending null',
+      expect.objectContaining({ value })
+    )
+
+    warn.mockRestore()
   })
 })
 

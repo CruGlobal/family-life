@@ -7,6 +7,7 @@ import {
   getFLRegistrationType,
   getEventTypeName,
   utcTimestampToSalesforce,
+  utcTimestampToSalesforceDate,
   localTimeToSalesforce,
   SF_FIELD_MAX_LENGTHS,
 } from './field-mapping.js'
@@ -112,9 +113,16 @@ export function transformRegistrant(
   // Registration type
   record.Involvement_Registration_Type__c = flRegType
 
-  // Dates
-  record.Date_Registered__c = registration.completedTimestamp || null
-  record.Date_Cancelled__c = registrant.withdrawnTimestamp || null
+  // Dates. Date_Registered__c and Date_Cancelled__c are SF DATE columns, so
+  // they take a calendar date in FamilyLife's zone — handing them a UTC instant
+  // filed every evening registration a day late. The rest are DATETIME and keep
+  // the instant as ERT sent it.
+  record.Date_Registered__c = registration.completedTimestamp
+    ? utcTimestampToSalesforceDate(registration.completedTimestamp)
+    : null
+  record.Date_Cancelled__c = registrant.withdrawnTimestamp
+    ? utcTimestampToSalesforceDate(registrant.withdrawnTimestamp)
+    : null
   record.Date_Check_In__c = registrant.checkedInTimestamp || null
   record.ERT_Last_Updated__c = registration.lastUpdatedTimestamp || null
   // createdTimestamp, not lastUpdatedTimestamp — a "created" date must not move

@@ -147,6 +147,51 @@ export function utcTimestampToSalesforce(value: string): string {
 }
 
 /**
+ * Zone whose calendar date FamilyLife files business records under. Used only
+ * for Salesforce DATE columns, which carry no zone of their own.
+ */
+export const SF_DATE_TIMEZONE = 'America/New_York'
+
+/**
+ * Reduce an ERT UTC timestamp to the calendar date a Salesforce DATE column
+ * should hold.
+ *
+ * DATE columns are zone-less: Salesforce stores whatever date it is handed. A
+ * full UTC instant therefore filed the *GMT* date, so every registration taken
+ * after 20:00 Eastern landed a day late — 21:33 on 9/4 is 01:33Z on 9/5.
+ * (Reported by FamilyLife, Sep 2026; 400 of 2000 sampled rows were affected.)
+ *
+ * Returns null on an unparseable value rather than a guess. Salesforce rejects
+ * a malformed DATE and inserts are allOrNone, so one bad value would block the
+ * entire run.
+ */
+export function utcTimestampToSalesforceDate(
+  value: string,
+  timeZone: string = SF_DATE_TIMEZONE
+): string | null {
+  // Validate the shape before parsing. V8's fallback parser is lenient enough
+  // to read "not a timestamp" as a real date, which would file the record under
+  // a silently wrong day — worse than sending nothing.
+  const wallClock = value.replace(' ', 'T').substring(0, 19)
+  const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(wallClock)
+    ? new Date(`${wallClock}Z`)
+    : new Date(NaN)
+
+  if (Number.isNaN(instant.getTime())) {
+    logger.warn('Unparseable timestamp for a Salesforce date field; sending null', { value })
+    return null
+  }
+
+  // en-CA renders as YYYY-MM-DD, which is what the SF REST API expects.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant)
+}
+
+/**
  * Convert a zone-less ERT wall-clock time ("2026-09-25 19:00:00") to UTC,
  * interpreting it in `timeZone`.
  *

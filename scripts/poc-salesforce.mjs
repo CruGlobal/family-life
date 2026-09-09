@@ -1,7 +1,7 @@
 /**
  * Salesforce PoC - Verifies:
  * 1. OAuth 2.0 client_credentials auth works
- * 2. Staging_Involvement_Object__c exists and has expected fields
+ * 2. Staging_Involvement__c exists and has expected fields
  * 3. A test insert succeeds (then deletes the test record)
  */
 import 'dotenv/config'
@@ -56,12 +56,12 @@ async function sfRequest(path) {
   return res.json()
 }
 
-// --- Step 2: Describe Staging_Involvement_Object__c ---
-console.log('\n=== Step 2: Describe Staging_Involvement_Object__c ===')
+// --- Step 2: Describe Staging_Involvement__c ---
+console.log('\n=== Step 2: Describe Staging_Involvement__c ===')
 
 let describe
 try {
-  describe = await sfRequest('/sobjects/Staging_Involvement_Object__c/describe')
+  describe = await sfRequest('/sobjects/Staging_Involvement__c/describe')
   console.log(`Object found: ${describe.name} (label: "${describe.label}")`)
   console.log(`  Total fields: ${describe.fields.length}`)
   console.log(`  Createable: ${describe.createable}`)
@@ -165,7 +165,7 @@ const testRecord = {
 
 let insertedId = null
 try {
-  const insertRes = await fetch(`${apiBase}/sobjects/Staging_Involvement_Object__c`, {
+  const insertRes = await fetch(`${apiBase}/sobjects/Staging_Involvement__c`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -191,7 +191,7 @@ try {
 if (insertedId) {
   console.log('\n=== Step 5: Cleanup (delete test record) ===')
   try {
-    const delRes = await fetch(`${apiBase}/sobjects/Staging_Involvement_Object__c/${insertedId}`, {
+    const delRes = await fetch(`${apiBase}/sobjects/Staging_Involvement__c/${insertedId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${accessToken}` },
     })
@@ -200,11 +200,11 @@ if (insertedId) {
     } else {
       const delBody = await delRes.text()
       console.log(`  Delete failed (${delRes.status}): ${delBody}`)
-      console.log(`  MANUAL CLEANUP NEEDED: delete Staging_Involvement_Object__c id=${insertedId}`)
+      console.log(`  MANUAL CLEANUP NEEDED: delete Staging_Involvement__c id=${insertedId}`)
     }
   } catch (err) {
     console.error(`  Delete error: ${err.message}`)
-    console.log(`  MANUAL CLEANUP NEEDED: delete Staging_Involvement_Object__c id=${insertedId}`)
+    console.log(`  MANUAL CLEANUP NEEDED: delete Staging_Involvement__c id=${insertedId}`)
   }
 }
 
